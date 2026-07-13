@@ -1,8 +1,19 @@
-require('dotenv').config();
+require('dotenv').config({ override: true });
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
+const { validateIntake } = require('./lib/intake-schema');
+const { createIdea, getIdeaById, updateIdeaStatus } = require('./lib/ideas-repo');
+const { gatherAllEvidence } = require('./lib/evidence-pipeline');
+const { insertEvidence, getEvidenceForIdea } = require('./lib/evidence-repo');
+const { computeScores } = require('./lib/scoring');
+const { insertScores } = require('./lib/scores-repo');
+const { determineVerdict, THRESHOLD_VERSION } = require('./lib/verdict');
+const { insertVerdict, getLatestVerdictForIdea } = require('./lib/verdicts-repo');
+const { runDeliveryStage, runPipeline } = require('./lib/pipeline');
+const { renderVerdictCardSVG } = require('./lib/verdict-card');
+const { buildReceipts, renderReceiptsHTML } = require('./lib/receipts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,6 +21,257 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+// ─── Intake (Step 1 schema + Step 2 persistence) ────────────────────────────────
+
+app.post('/ideas', async (req, res) => {
+  const { valid, errors } = validateIntake(req.body);
+  if (!valid) {
+    return res.status(400).json({ errors });
+  }
+
+  try {
+    const idea = await createIdea(req.body);
+    res.status(201).json(idea);
+  } catch (err) {
+    console.error('createIdea error:', err);
+    res.status(500).json({ error: 'Failed to save idea.' });
+  }
+});
+
+// ─── Evidence (Step 3 pipeline) ─────────────────────────────────────────────────
+
+app.post('/ideas/:id/evidence', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    await updateIdeaStatus(idea.id, 'evidence_gathering');
+
+    const dimensionResults = await gatherAllEvidence(idea);
+
+    for (const result of dimensionResults) {
+      if (result.status === 'ok') {
+        await insertEvidence(idea.id, result.dimension, result.claims);
+      }
+    }
+
+    const evidence = await getEvidenceForIdea(idea.id);
+    res.status(200).json({
+      idea_id: idea.id,
+      dimensions: dimensionResults.map((r) => ({
+        dimension: r.dimension,
+        status: r.status,
+        claim_count: r.claims.length
+      })),
+      evidence
+    });
+  } catch (err) {
+    console.error('evidence gathering error:', err);
+    res.status(500).json({ error: 'Failed to gather evidence.' });
+  }
+});
+
+// ─── Scoring (Step 4 pure-code engine) ──────────────────────────────────────────
+
+app.post('/ideas/:id/score', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const evidence = await getEvidenceForIdea(idea.id);
+    const computed = computeScores(evidence);
+
+    await insertScores(idea.id, computed);
+    await updateIdeaStatus(idea.id, 'scoring');
+
+    res.status(200).json({
+      idea_id: idea.id,
+      rubric_version: computed.rubric_version,
+      dimensions: computed.dimensions,
+      total_score: computed.total
+    });
+  } catch (err) {
+    console.error('scoring error:', err);
+    res.status(500).json({ error: 'Failed to score idea.' });
+  }
+});
+
+// ─── Verdict (Step 5 pure-code thresholds) ──────────────────────────────────────
+
+app.post('/ideas/:id/verdict', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const evidence = await getEvidenceForIdea(idea.id);
+    const computed = computeScores(evidence);
+    const verdict = determineVerdict(computed.total);
+
+    const row = await insertVerdict(idea.id, {
+      verdict,
+      totalScore: computed.total,
+      thresholdVersion: THRESHOLD_VERSION
+    });
+    await updateIdeaStatus(idea.id, 'verdict');
+
+    res.status(200).json({
+      idea_id: idea.id,
+      verdict,
+      total_score: computed.total,
+      threshold_version: THRESHOLD_VERSION,
+      verdict_id: row.id
+    });
+  } catch (err) {
+    console.error('verdict error:', err);
+    res.status(500).json({ error: 'Failed to determine verdict.' });
+  }
+});
+
+// ─── Voice (Step 6 two-pass voice layer, Step 7 guardrails) ─────────────────────
+// Delegates to the shared delivery stage (Step 8) — single source of truth for
+// the guardrail-wrapped voice pass. This standalone trigger does NOT advance the
+// cursor to 'complete'; the full pipeline runner owns that transition.
+
+app.post('/ideas/:id/voice', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const { guarded, updated, nextSteps } = await runDeliveryStage(idea);
+    res.status(200).json({
+      idea_id: idea.id,
+      verdict_id: updated.id,
+      verdict: updated.verdict,
+      voice_pass_output: updated.voice_pass_output,
+      voice_prompt_version: updated.voice_prompt_version,
+      next_steps: nextSteps,
+      sarcasm_dial: guarded.dialUsed,
+      sensitive_input: guarded.sensitiveInput,
+      regenerated: guarded.regenerated
+    });
+  } catch (err) {
+    if (err.code === 'NO_VERDICT') {
+      return res.status(409).json({ error: 'No verdict to voice. Run POST /ideas/:id/verdict first.' });
+    }
+    if (err.code === 'GUARDRAIL_RESIDUAL') {
+      console.error('guardrail filter: residual violations after dial-0 regeneration:', err.violations);
+      return res.status(502).json({ error: 'Reply failed guardrail screening.', violations: err.violations });
+    }
+    console.error('voice rendering error:', err);
+    res.status(500).json({ error: 'Failed to render verdict voice.' });
+  }
+});
+
+// ─── Full pipeline (Step 8 resumable state machine) ─────────────────────────────
+// Runs the validation pipeline from wherever the idea's cursor sits to
+// 'complete'. Already-completed stages are skipped, so a crashed/interrupted
+// run resumes rather than restarts (Architecture §3).
+
+app.post('/ideas/:id/run', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const result = await runPipeline(idea.id);
+    res.status(200).json({
+      idea_id: idea.id,
+      status: result.idea.status,
+      resumed_from: result.resumedFrom,
+      trace: result.trace
+    });
+  } catch (err) {
+    if (err.code === 'GUARDRAIL_RESIDUAL') {
+      return res.status(502).json({ error: 'Reply failed guardrail screening.', violations: err.violations });
+    }
+    console.error('pipeline run error:', err);
+    res.status(500).json({ error: 'Pipeline run failed.' });
+  }
+});
+
+// ─── Verdict card (Step 9, FR-1.5) ──────────────────────────────────────────────
+// Deterministic SVG rendering of the decided verdict — the shareable growth
+// artifact. Rendered on demand from the persisted verdict + scores; the stable
+// URL is set on the verdict row during the delivery stage.
+
+app.get('/ideas/:id/card.svg', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const verdictRow = await getLatestVerdictForIdea(idea.id);
+    if (!verdictRow) {
+      return res.status(404).json({ error: 'No verdict card yet. Run the verdict stage first.' });
+    }
+
+    const evidence = await getEvidenceForIdea(idea.id);
+    const scores = computeScores(evidence);
+    const svg = renderVerdictCardSVG({
+      verdict: verdictRow.verdict,
+      totalScore: Number(verdictRow.total_score),
+      idea,
+      dimensions: scores.dimensions
+    });
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.status(200).send(svg);
+  } catch (err) {
+    console.error('verdict card error:', err);
+    res.status(500).json({ error: 'Failed to render verdict card.' });
+  }
+});
+
+// ─── Evidence receipts (Step 10, FR-1.6) ────────────────────────────────────────
+// Every scored claim linked to its source, viewable by the user. PURE CODE — the
+// stored, sourced evidence is assembled behind the verdict and grouped by rubric
+// dimension, with deterministic per-dimension scores. Transparency is the
+// anti-dispute mechanism (Architecture §3: "Disputes are answered with receipts,
+// not re-runs"). Two views share one builder: JSON for machines, HTML for humans.
+
+async function loadReceipts(ideaId) {
+  const idea = await getIdeaById(ideaId);
+  if (!idea) return { notFound: true };
+  const evidence = await getEvidenceForIdea(idea.id);
+  const verdict = await getLatestVerdictForIdea(idea.id);
+  return { receipts: buildReceipts({ idea, evidence, verdict }) };
+}
+
+app.get('/ideas/:id/receipts', async (req, res) => {
+  try {
+    const { notFound, receipts } = await loadReceipts(req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Idea not found.' });
+    res.status(200).json(receipts);
+  } catch (err) {
+    console.error('receipts error:', err);
+    res.status(500).json({ error: 'Failed to assemble receipts.' });
+  }
+});
+
+app.get('/ideas/:id/receipts.html', async (req, res) => {
+  try {
+    const { notFound, receipts } = await loadReceipts(req.params.id);
+    if (notFound) return res.status(404).send('Idea not found.');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.status(200).send(renderReceiptsHTML(receipts));
+  } catch (err) {
+    console.error('receipts html error:', err);
+    res.status(500).send('Failed to assemble receipts.');
+  }
+});
 
 // ─── Roast database ────────────────────────────────────────────────────────────
 
