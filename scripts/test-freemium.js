@@ -24,6 +24,7 @@ const { buildCompetitiveAnalysis } = require('../lib/competitive');
 const { buildTeasers, TEASER_ORDER, blurFragment } = require('../lib/teasers');
 const { computeScores } = require('../lib/scoring');
 const { getSupabase } = require('../lib/db');
+const { costFor, summarizeUsage, usageLine } = require('../lib/usage-meter');
 
 const PORT = process.env.PORT || 3000;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -87,6 +88,41 @@ function partA() {
   assert(f.preview.endsWith('…') && 'one two three four five six seven eight nine ten eleven twelve thirteen'.startsWith(f.preview.replace(/…$/, '')),
     'blurFragment truncates real text with an ellipsis, adds nothing');
   assert(blurFragment('') === null, 'blurFragment of empty is null (no content, no teaser)');
+}
+
+// ─── Part A2: usage/cost metering math (pure, no DB/API/LLM) ─────────────────────
+function partACost() {
+  console.log('--- Part A2: usage + cost metering (pure) ---');
+
+  // Per-model token pricing (USD per 1M tokens).
+  assert(costFor('claude-haiku-4-5', { input_tokens: 1_000_000 }).input_cost === 1.0,
+    'Haiku input priced at $1.00 / 1M tokens');
+  assert(costFor('claude-sonnet-4-6', { output_tokens: 1_000_000 }).output_cost === 15.0,
+    'Sonnet output priced at $15.00 / 1M tokens');
+  assert(costFor('claude-opus-4-6', { input_tokens: 1_000_000, output_tokens: 1_000_000 }).total_cost === 30.0,
+    'Opus $5 in + $25 out = $30.00 / 1M each');
+
+  // web_search bills $10 / 1,000 requests, model-independent.
+  assert(costFor('claude-opus-4-6', { web_search_requests: 1000 }).web_search_cost === 10.0,
+    'web_search billed at $10.00 / 1,000 requests');
+
+  // An unknown model prices tokens at 0 (flagged) but still bills web_search.
+  const unknown = costFor('some-future-model', { input_tokens: 1_000_000, web_search_requests: 500 });
+  assert(unknown.priced === false && unknown.input_cost === 0 && unknown.web_search_cost === 5.0,
+    'unknown model: tokens unpriced (flagged), web_search still billed');
+
+  // summarizeUsage folds per-call lines into totals + a per-model breakdown.
+  const lines = [
+    usageLine('quick_evidence:demand', 'claude-haiku-4-5', { usage: { input_tokens: 1_000_000, output_tokens: 200_000, server_tool_use: { web_search_requests: 2 } } }),
+    usageLine('quick_voice', 'claude-haiku-4-5', { usage: { input_tokens: 100_000, output_tokens: 100_000 } })
+  ];
+  const summary = summarizeUsage(lines);
+  assert(summary.totals.calls === 2 && summary.totals.input_tokens === 1_100_000 && summary.totals.web_search_requests === 2,
+    'summary totals sum tokens + searches across calls');
+  // 1.1M in ($1.10) + 0.3M out ($1.50) + 2 searches ($0.02) = $2.62.
+  assert(summary.totals.total_cost === 2.62, 'summary total_cost sums token + web_search cost exactly');
+  assert(summary.by_model.length === 1 && summary.by_model[0].model === 'claude-haiku-4-5' && summary.by_model[0].calls === 2,
+    'per-model breakdown groups both Haiku calls');
 }
 
 // ─── Part B: real endpoints (Supabase + Stripe test mode + Anthropic) ────────────
@@ -174,6 +210,9 @@ async function partB() {
       'locked sections in order: next steps, competitive analysis, evidence');
     assert(free.unlock && /unlock/i.test(free.unlock.action) && free.unlock.checkout === `/ideas/${ideaId}/checkout`,
       'free screen offers the unlock (moved checkout trigger)');
+    // Cost tracking: the free verdict reports its measured API spend.
+    assert(free.cost && typeof free.cost.total_cost === 'number' && free.cost.total_cost > 0 && free.cost.input_tokens > 0,
+      `free verdict reports a measured API cost (tokens + $${free.cost && free.cost.total_cost})`);
 
     // (2) SECOND free verdict on the same idea+account is BLOCKED.
     const blockedRes = await fetch(`${BASE_URL}/ideas/${ideaId}/free-verdict`, {
@@ -205,6 +244,19 @@ async function partB() {
     const validate = await validateRes.json();
     assert(validateRes.status === 200 && validate.status === 'complete',
       `deep validate run completes (got ${validateRes.status}, status ${validate.status})`);
+    // Cost tracking: the deep run reports its measured API spend...
+    assert(validate.cost && typeof validate.cost.total_cost === 'number' && validate.cost.total_cost > 0 && validate.cost.output_tokens > 0,
+      `deep run reports a measured API cost (tokens + $${validate.cost && validate.cost.total_cost})`);
+    // ...and it is persisted on the validation_runs ledger row.
+    const { data: runRows } = await supabase
+      .from('validation_runs')
+      .select('cost_usd, input_tokens, output_tokens, web_search_requests, usage_detail')
+      .eq('idea_id', ideaId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const runRow = runRows && runRows[0];
+    assert(runRow && Number(runRow.cost_usd) > 0 && runRow.output_tokens > 0 && !!runRow.usage_detail,
+      `computed cost stored on the validation run record ($${runRow && runRow.cost_usd})`);
 
     // (6) The same idea now shows the FULL report: leads with 3 next steps, then
     //     competitive analysis, then evidence with working source links.
@@ -235,6 +287,7 @@ async function partB() {
 
 async function main() {
   partA();
+  partACost();
   await partB();
   console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
   process.exit(failures === 0 ? 0 : 1);

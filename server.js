@@ -22,8 +22,10 @@ const {
   getPurchaseBySessionId,
   countPaidPurchases,
   recordValidationRun,
-  countValidationRuns
+  countValidationRuns,
+  updateValidationRunCost
 } = require('./lib/purchases-repo');
+const { formatUsageLog } = require('./lib/usage-meter');
 const { createCheckoutSession, constructWebhookEvent } = require('./lib/checkout');
 const { findOrCreateAccount } = require('./lib/accounts-repo');
 const { getFreeVerdict, createFreeVerdict } = require('./lib/free-verdicts-repo');
@@ -429,8 +431,13 @@ app.post('/ideas/:id/validate', async (req, res) => {
 
     // Consume the run BEFORE the pipeline so a concurrent duplicate can't slip a
     // third run through; the ledger is the source of truth.
-    await recordValidationRun(idea.id, null);
+    const runRow = await recordValidationRun(idea.id, null);
     const result = await runPipeline(idea.id);
+
+    // Persist the measured API cost of this run onto its ledger row, and log it.
+    await updateValidationRunCost(runRow.id, result.usage);
+    console.log(`[cost] validate idea=${idea.id} run=${runRow.id} — ${formatUsageLog(result.usage)}`);
+
     const after = await entitlementFor(idea.id);
 
     res.status(200).json({
@@ -438,6 +445,7 @@ app.post('/ideas/:id/validate', async (req, res) => {
       status: result.idea.status,
       resumed_from: result.resumedFrom,
       trace: result.trace,
+      cost: result.usage.totals,
       entitlement: after
     });
   } catch (err) {
@@ -490,6 +498,7 @@ app.post('/ideas/:id/free-verdict', async (req, res) => {
     }
 
     const free = await produceFreeVerdict(idea);
+    console.log(`[cost] free-verdict idea=${idea.id} account=${accountId} — ${formatUsageLog(free.cost)}`);
 
     let row;
     try {
@@ -505,7 +514,10 @@ app.post('/ideas/:id/free-verdict', async (req, res) => {
           locked_sections: free.locked_sections,
           sarcasm_dial: free.sarcasm_dial,
           sensitive_input: free.sensitive_input,
-          regenerated: free.regenerated
+          regenerated: free.regenerated,
+          // Measured API cost of this free verdict (there is no validation_runs
+          // row for the free tier, so the cost lives on the free_verdict record).
+          cost: free.cost
         }
       });
     } catch (e) {
@@ -529,7 +541,8 @@ app.post('/ideas/:id/free-verdict', async (req, res) => {
       locked_sections: free.locked_sections,
       unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` },
       sarcasm_dial: free.sarcasm_dial,
-      sensitive_input: free.sensitive_input
+      sensitive_input: free.sensitive_input,
+      cost: free.cost.totals
     });
   } catch (err) {
     if (err.code === 'GUARDRAIL_RESIDUAL') {
