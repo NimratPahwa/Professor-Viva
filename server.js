@@ -25,6 +25,10 @@ const {
   countValidationRuns
 } = require('./lib/purchases-repo');
 const { createCheckoutSession, constructWebhookEvent } = require('./lib/checkout');
+const { findOrCreateAccount } = require('./lib/accounts-repo');
+const { getFreeVerdict, createFreeVerdict } = require('./lib/free-verdicts-repo');
+const { produceFreeVerdict } = require('./lib/free-verdict');
+const { buildCompetitiveAnalysis } = require('./lib/competitive');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -75,7 +79,15 @@ app.post('/ideas', async (req, res) => {
   }
 
   try {
-    const idea = await createIdea(req.body);
+    // Step 11.5 (FR-1.12): an optional lightweight account link. When an
+    // account_ref is supplied, the idea is attributed to that account so the
+    // one-free-verdict-per-idea rule (FR-1.9) can be enforced per account.
+    let accountId;
+    if (req.body.account_ref) {
+      const account = await findOrCreateAccount(req.body.account_ref);
+      accountId = account.id;
+    }
+    const idea = await createIdea({ ...req.body, account_id: accountId });
     res.status(201).json(idea);
   } catch (err) {
     console.error('createIdea error:', err);
@@ -434,6 +446,144 @@ app.post('/ideas/:id/validate', async (req, res) => {
     }
     console.error('validate run error:', err);
     res.status(500).json({ error: 'Validation run failed.' });
+  }
+});
+
+// ─── Freemium two-tier gate (Step 11.5, FR-1.9/1.10/1.11) ───────────────────────
+// FREE tier: one verdict per idea, per account — score + BUILD/PIVOT/BURY + roast
+// from a QUICK evidence pass, with the paid sections LOCKED and teased from the
+// user's own real content (ordered: next steps, competitive analysis, evidence).
+// PAID tier: the Step-11 checkout (unchanged mechanically) is the "Unlock your
+// next steps + full report" action; the deep run + full report follow.
+
+// The free verdict. Requires an account_ref so the one-per-(account, idea) rule
+// is enforced. A second attempt on the same pair is blocked (409) pending unlock.
+app.post('/ideas/:id/free-verdict', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  const accountRef = (req.body && req.body.account_ref) || idea.account_ref;
+  if (!accountRef && !idea.account_id) {
+    return res.status(400).json({ error: 'account_ref is required for a free verdict.' });
+  }
+
+  try {
+    // Resolve the account: prefer the idea's existing link, else the supplied ref.
+    let accountId = idea.account_id;
+    if (!accountId) {
+      const account = await findOrCreateAccount(accountRef);
+      accountId = account.id;
+    }
+
+    // FR-1.9: exactly one free verdict per (account, idea). A second attempt is
+    // blocked pending unlock (the pre-check; the DB unique constraint backs it up).
+    const existing = await getFreeVerdict(accountId, idea.id);
+    if (existing) {
+      return res.status(409).json({
+        error: 'This idea already used its one free verdict on this account. Unlock the full report to go deeper.',
+        blocked: true,
+        idea_id: idea.id,
+        unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` }
+      });
+    }
+
+    const free = await produceFreeVerdict(idea);
+
+    let row;
+    try {
+      row = await createFreeVerdict({
+        accountId,
+        ideaId: idea.id,
+        verdict: free.verdict,
+        totalScore: free.total_score,
+        roast: free.roast,
+        payload: {
+          quick_pass_label: free.shallow.quick_pass_label,
+          shallow: free.shallow,
+          locked_sections: free.locked_sections,
+          sarcasm_dial: free.sarcasm_dial,
+          sensitive_input: free.sensitive_input,
+          regenerated: free.regenerated
+        }
+      });
+    } catch (e) {
+      // Lost the one-per race to a concurrent request — treat as blocked.
+      if (e.code === 'FREE_VERDICT_EXISTS') {
+        return res.status(409).json({ error: 'This idea already used its one free verdict on this account.', blocked: true });
+      }
+      throw e;
+    }
+
+    // The free SCREEN: verdict + score + roast, and the LOCKED sections in order
+    // (FR-1.11). The shallow full content stays server-side (in the ledger).
+    res.status(201).json({
+      idea_id: idea.id,
+      free_verdict_id: row.id,
+      tier: 'free',
+      quick_pass_label: free.shallow.quick_pass_label,
+      verdict: free.verdict,
+      total_score: free.total_score,
+      roast: free.roast,
+      locked_sections: free.locked_sections,
+      unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` },
+      sarcasm_dial: free.sarcasm_dial,
+      sensitive_input: free.sensitive_input
+    });
+  } catch (err) {
+    if (err.code === 'GUARDRAIL_RESIDUAL') {
+      return res.status(502).json({ error: 'Free verdict failed guardrail screening.', violations: err.violations });
+    }
+    console.error('free verdict error:', err);
+    res.status(500).json({ error: 'Failed to produce free verdict.' });
+  }
+});
+
+// The PAID full report (FR-1.10). Gated on a paid unlock: no purchase → 402. The
+// report LEADS WITH THE NEXT STEPS, then competitive analysis, then evidence
+// receipts — the paid-tier order (03-AI Rules §3.2). Assembled from the DEEP
+// evidence run persisted by POST /ideas/:id/validate.
+app.get('/ideas/:id/report', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const paidPurchases = await countPaidPurchases(idea.id);
+    if (paidPurchases < 1) {
+      return res.status(402).json({
+        error: 'Locked. Unlock your next steps + full report to view this.',
+        locked: true,
+        unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` }
+      });
+    }
+
+    const verdict = await getLatestVerdictForIdea(idea.id);
+    if (!verdict || !verdict.voice_pass_output) {
+      return res.status(409).json({ error: 'Full report not generated yet. Run POST /ideas/:id/validate after unlocking.' });
+    }
+
+    const evidence = await getEvidenceForIdea(idea.id);
+    const competitive = buildCompetitiveAnalysis({ evidence });
+    const receipts = buildReceipts({ idea, evidence, verdict });
+
+    // Lead with the next steps (FR-1.10 / §3.2), then competitive, then evidence.
+    res.status(200).json({
+      idea_id: idea.id,
+      tier: 'paid',
+      verdict: verdict.verdict,
+      total_score: Number(verdict.total_score),
+      next_steps: verdict.next_steps || [],
+      competitive_analysis: competitive,
+      evidence_receipts: receipts,
+      roast: verdict.voice_pass_output,
+      card_asset_url: verdict.card_asset_url
+    });
+  } catch (err) {
+    console.error('report error:', err);
+    res.status(500).json({ error: 'Failed to assemble full report.' });
   }
 });
 
