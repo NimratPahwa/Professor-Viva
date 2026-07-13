@@ -14,11 +14,55 @@ const { insertVerdict, getLatestVerdictForIdea } = require('./lib/verdicts-repo'
 const { runDeliveryStage, runPipeline } = require('./lib/pipeline');
 const { renderVerdictCardSVG } = require('./lib/verdict-card');
 const { buildReceipts, renderReceiptsHTML } = require('./lib/receipts');
+const { pricingOptions, resolveCurrency } = require('./lib/pricing');
+const { evaluateEntitlement } = require('./lib/entitlement');
+const {
+  createPendingPurchase,
+  markPurchasePaid,
+  getPurchaseBySessionId,
+  countPaidPurchases,
+  recordValidationRun,
+  countValidationRuns
+} = require('./lib/purchases-repo');
+const { createCheckoutSession, constructWebhookEvent } = require('./lib/checkout');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
+
+// Stripe webhook MUST see the raw, unparsed body to verify the signature, so it
+// is registered with a raw body parser BEFORE the global JSON parser below.
+// Everything after this line gets parsed JSON as usual.
+app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = constructWebhookEvent(req.body, signature);
+  } catch (err) {
+    console.error('stripe webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      // The purchase becomes 'paid' only on a verified completed session. We
+      // re-assert Price ID / currency / amount from the session so the stored
+      // record reflects exactly what Stripe charged (FR-1.7).
+      const currency = (session.currency || (session.metadata && session.metadata.currency) || '').toLowerCase();
+      await markPurchasePaid(session.id, {
+        currency: currency || undefined,
+        amount: session.amount_total != null ? session.amount_total : undefined
+      });
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('stripe webhook handling error:', err);
+    res.status(500).json({ error: 'Webhook handling failed.' });
+  }
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
@@ -270,6 +314,126 @@ app.get('/ideas/:id/receipts.html', async (req, res) => {
   } catch (err) {
     console.error('receipts html error:', err);
     res.status(500).send('Failed to assemble receipts.');
+  }
+});
+
+// ─── Pricing, checkout & entitlement (Step 11, FR-1.7) ──────────────────────────
+// One-time purchase via Stripe Checkout Sessions. Prices come from config (never
+// hardcoded): ₹1,499 (INR) for India-detected users, $39 (USD) for everyone else,
+// with a visible currency selector override. One paid purchase entitles the
+// initial validation plus one free re-validation; the third run is blocked.
+
+// Region-detected pricing + both options, so the client can render the selector
+// with the detected region preselected. ?currency=inr|usd overrides detection.
+app.get('/pricing', (req, res) => {
+  try {
+    res.status(200).json(pricingOptions(req, req.query.currency));
+  } catch (err) {
+    console.error('pricing error:', err);
+    res.status(500).json({ error: 'Failed to resolve pricing.' });
+  }
+});
+
+// Opens a one-time Checkout Session for an idea in the resolved currency and
+// records a pending purchase (Stripe Price ID + currency + amount) to reconcile
+// against the webhook.
+app.post('/ideas/:id/checkout', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const override = (req.body && req.body.currency) || req.query.currency;
+    const { currency } = resolveCurrency(req, override);
+    const { session, stripePriceId, amount } = await createCheckoutSession({ ideaId: idea.id, currency });
+
+    await createPendingPurchase({
+      ideaId: idea.id,
+      stripeSessionId: session.id,
+      stripePriceId,
+      currency,
+      amount
+    });
+
+    res.status(201).json({
+      idea_id: idea.id,
+      checkout_url: session.url,
+      session_id: session.id,
+      currency,
+      amount,
+      stripe_price_id: stripePriceId
+    });
+  } catch (err) {
+    console.error('checkout error:', err);
+    res.status(500).json({ error: 'Failed to open checkout.' });
+  }
+});
+
+// Current entitlement for an idea: how many paid purchases, runs used, and
+// whether another validation run is allowed. Pure count-based rule (FR-1.7).
+async function entitlementFor(ideaId) {
+  const [paidPurchases, runsUsed] = await Promise.all([
+    countPaidPurchases(ideaId),
+    countValidationRuns(ideaId)
+  ]);
+  return evaluateEntitlement({ paidPurchases, runsUsed });
+}
+
+app.get('/ideas/:id/entitlement', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+  try {
+    const ent = await entitlementFor(idea.id);
+    res.status(200).json({ idea_id: idea.id, ...ent });
+  } catch (err) {
+    console.error('entitlement error:', err);
+    res.status(500).json({ error: 'Failed to read entitlement.' });
+  }
+});
+
+// Entitlement-GATED validation run. Unlike the raw POST /ideas/:id/run (used by
+// tests and the batch runner), this is the paid product action: it blocks the
+// third run with 402 until a new purchase, records the consumed run, then runs
+// the full pipeline. The rule is identical for INR and USD buyers.
+app.post('/ideas/:id/validate', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) {
+    return res.status(404).json({ error: 'Idea not found.' });
+  }
+
+  try {
+    const ent = await entitlementFor(idea.id);
+    if (!ent.allowed) {
+      return res.status(402).json({
+        error: ent.reason === 'no_purchase'
+          ? 'No purchase found. Buy a validation to continue.'
+          : 'Free re-validation used. Buy another validation to run again.',
+        ...ent
+      });
+    }
+
+    // Consume the run BEFORE the pipeline so a concurrent duplicate can't slip a
+    // third run through; the ledger is the source of truth.
+    await recordValidationRun(idea.id, null);
+    const result = await runPipeline(idea.id);
+    const after = await entitlementFor(idea.id);
+
+    res.status(200).json({
+      idea_id: idea.id,
+      status: result.idea.status,
+      resumed_from: result.resumedFrom,
+      trace: result.trace,
+      entitlement: after
+    });
+  } catch (err) {
+    if (err.code === 'GUARDRAIL_RESIDUAL') {
+      return res.status(502).json({ error: 'Reply failed guardrail screening.', violations: err.violations });
+    }
+    console.error('validate run error:', err);
+    res.status(500).json({ error: 'Validation run failed.' });
   }
 });
 
