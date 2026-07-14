@@ -25,6 +25,7 @@ const { buildTeasers, TEASER_ORDER, blurFragment } = require('../lib/teasers');
 const { computeScores } = require('../lib/scoring');
 const { getSupabase } = require('../lib/db');
 const { costFor, summarizeUsage, usageLine } = require('../lib/usage-meter');
+const { planDelta } = require('../lib/pipeline');
 
 const PORT = process.env.PORT || 3000;
 const BASE_URL = `http://localhost:${PORT}`;
@@ -123,6 +124,38 @@ function partACost() {
   assert(summary.totals.total_cost === 2.62, 'summary total_cost sums token + web_search cost exactly');
   assert(summary.by_model.length === 1 && summary.by_model[0].model === 'claude-haiku-4-5' && summary.by_model[0].calls === 2,
     'per-model breakdown groups both Haiku calls');
+}
+
+// ─── Part A3: delta-run staleness planner (pure, no DB/API/LLM) ──────────────────
+function partADelta() {
+  console.log('--- Part A3: delta re-validation staleness planner (pure) ---');
+  const now = Date.now();
+  const staleMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const iso = (msAgo) => new Date(now - msAgo).toISOString();
+
+  // A mix: fresh demand, stale market_gap, and three dimensions with no stored
+  // rows at all. Fresh is reused; stale + missing are re-gathered.
+  const rows = [
+    { dimension: 'demand', retrieved_at: iso(60 * 60 * 1000) },          // 1h old → fresh
+    { dimension: 'demand', retrieved_at: iso(2 * 60 * 60 * 1000) },      // 2h old → fresh
+    { dimension: 'market_gap', retrieved_at: iso(10 * 24 * 60 * 60 * 1000) } // 10d old → stale
+  ];
+  const plan = planDelta(rows, now, staleMs);
+  assert(plan.reused.length === 1 && plan.reused[0] === 'demand',
+    'a dimension with fresh claims is reused (not re-gathered)');
+  assert(plan.stale.includes('market_gap'),
+    'a dimension whose freshest claim is older than the window is stale');
+  assert(['monetization', 'founder_fit', 'timing'].every((d) => plan.stale.includes(d)),
+    'dimensions with no stored claims are stale (retry them)');
+  assert(plan.stale.length + plan.reused.length === 5,
+    'every one of the five dimensions is classified exactly once');
+
+  // All fresh → nothing to re-gather (the cheapest possible re-validation).
+  const allFresh = Object.keys(require('../lib/evidence-pipeline').DIMENSIONS)
+    .map((dimension) => ({ dimension, retrieved_at: iso(60 * 60 * 1000) }));
+  const nothing = planDelta(allFresh, now, staleMs);
+  assert(nothing.stale.length === 0 && nothing.reused.length === 5,
+    'when all five dimensions are fresh, the delta run re-gathers nothing');
 }
 
 // ─── Part B: real endpoints (Supabase + Stripe test mode + Anthropic) ────────────
@@ -257,6 +290,16 @@ async function partB() {
     const runRow = runRows && runRows[0];
     assert(runRow && Number(runRow.cost_usd) > 0 && runRow.output_tokens > 0 && !!runRow.usage_detail,
       `computed cost stored on the validation run record ($${runRow && runRow.cost_usd})`);
+    // Done-When (cost optimization): the FULL deep run costs under $2.50.
+    assert(runRow && Number(runRow.cost_usd) < 2.50,
+      `deep run cost is under the $2.50 target ($${runRow && runRow.cost_usd})`);
+    // Done-When: evidence still has sourced claims on all five dimensions (or an
+    // honest insufficient_signal — i.e. a dimension may legitimately be empty).
+    const { data: evRows } = await supabase
+      .from('evidence').select('dimension').eq('idea_id', ideaId);
+    const dimsWithEvidence = new Set((evRows || []).map((r) => r.dimension));
+    assert(dimsWithEvidence.size >= 4,
+      `deep run produced sourced evidence on ${dimsWithEvidence.size}/5 dimensions (rest = honest insufficient_signal)`);
 
     // (6) The same idea now shows the FULL report: leads with 3 next steps, then
     //     competitive analysis, then evidence with working source links.
@@ -275,6 +318,32 @@ async function partB() {
     const withHttp = allClaims.filter((c) => /^https?:\/\//i.test(c.source_url));
     assert(allClaims.length > 0 && withHttp.length === allClaims.length,
       'every evidence receipt has a working http(s) source link');
+
+    // (7) FREE RE-VALIDATION is a DELTA run: it reuses the fresh evidence just
+    //     gathered and re-gathers only stale dimensions — so the second entitled
+    //     run is genuinely cheap (Done-When: under $1.50).
+    console.log('  ·· running the free RE-VALIDATION (delta) — reuses fresh evidence ··');
+    const revalRes = await fetch(`${BASE_URL}/ideas/${ideaId}/validate`, { method: 'POST' });
+    const reval = await revalRes.json();
+    assert(revalRes.status === 200 && reval.mode === 'delta',
+      `re-validation runs in delta mode (got ${revalRes.status}, mode ${reval.mode})`);
+    // Its cost lands on a fresh validation_runs ledger row...
+    const { data: revalRows } = await supabase
+      .from('validation_runs')
+      .select('cost_usd, output_tokens, usage_detail')
+      .eq('idea_id', ideaId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const revalRow = revalRows && revalRows[0];
+    assert(revalRow && Number(revalRow.cost_usd) >= 0 && !!revalRow.usage_detail,
+      `delta run cost stored on its own ledger row ($${revalRow && revalRow.cost_usd})`);
+    // Done-When: the re-validation run costs under $1.50 (reusing fresh evidence
+    // means it re-gathers little or nothing, dominated by the cheap voice pass).
+    assert(revalRow && Number(revalRow.cost_usd) < 1.50,
+      `delta re-validation is under the $1.50 target ($${revalRow && revalRow.cost_usd})`);
+    // A THIRD entitled run is blocked (2 runs per purchase consumed).
+    const thirdRes = await fetch(`${BASE_URL}/ideas/${ideaId}/validate`, { method: 'POST' });
+    assert(thirdRes.status === 402, 'a third validation run is blocked (402) — entitlement exhausted');
   } finally {
     serverProc.kill();
     if (ideaId) {
@@ -288,6 +357,7 @@ async function partB() {
 async function main() {
   partA();
   partACost();
+  partADelta();
   await partB();
   console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) failed.`);
   process.exit(failures === 0 ? 0 : 1);
