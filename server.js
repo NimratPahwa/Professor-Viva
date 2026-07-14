@@ -11,7 +11,7 @@ const { computeScores } = require('./lib/scoring');
 const { insertScores } = require('./lib/scores-repo');
 const { determineVerdict, THRESHOLD_VERSION } = require('./lib/verdict');
 const { insertVerdict, getLatestVerdictForIdea } = require('./lib/verdicts-repo');
-const { runDeliveryStage, runPipeline } = require('./lib/pipeline');
+const { runDeliveryStage, runPipeline, runDeltaPipeline } = require('./lib/pipeline');
 const { renderVerdictCardSVG } = require('./lib/verdict-card');
 const { buildReceipts, renderReceiptsHTML } = require('./lib/receipts');
 const { pricingOptions, resolveCurrency } = require('./lib/pricing');
@@ -432,17 +432,25 @@ app.post('/ideas/:id/validate', async (req, res) => {
     // Consume the run BEFORE the pipeline so a concurrent duplicate can't slip a
     // third run through; the ledger is the source of truth.
     const runRow = await recordValidationRun(idea.id, null);
-    const result = await runPipeline(idea.id);
+
+    // The first entitled run is a FULL deep gather; the free re-validation is a
+    // DELTA run that reuses fresh evidence and refreshes only stale dimensions —
+    // that is what keeps the "free" run genuinely cheap (cost optimization).
+    const isRevalidation = ent.reason === 'free_revalidation';
+    const result = isRevalidation
+      ? await runDeltaPipeline(idea.id)
+      : await runPipeline(idea.id);
 
     // Persist the measured API cost of this run onto its ledger row, and log it.
     await updateValidationRunCost(runRow.id, result.usage);
-    console.log(`[cost] validate idea=${idea.id} run=${runRow.id} — ${formatUsageLog(result.usage)}`);
+    console.log(`[cost] validate idea=${idea.id} run=${runRow.id} mode=${isRevalidation ? 'delta' : 'full'} — ${formatUsageLog(result.usage)}`);
 
     const after = await entitlementFor(idea.id);
 
     res.status(200).json({
       idea_id: idea.id,
       status: result.idea.status,
+      mode: isRevalidation ? 'delta' : 'full',
       resumed_from: result.resumedFrom,
       trace: result.trace,
       cost: result.usage.totals,
