@@ -10,7 +10,7 @@ const { insertEvidence, getEvidenceForIdea } = require('./lib/evidence-repo');
 const { computeScores } = require('./lib/scoring');
 const { insertScores } = require('./lib/scores-repo');
 const { determineVerdict, THRESHOLD_VERSION } = require('./lib/verdict');
-const { insertVerdict, getLatestVerdictForIdea } = require('./lib/verdicts-repo');
+const { insertVerdict, getLatestVerdictForIdea, countBuildVerdictsThisMonth } = require('./lib/verdicts-repo');
 const { runDeliveryStage, runPipeline, runDeltaPipeline } = require('./lib/pipeline');
 const { renderVerdictCardSVG } = require('./lib/verdict-card');
 const { buildReceipts, renderReceiptsHTML } = require('./lib/receipts');
@@ -28,9 +28,15 @@ const {
 const { formatUsageLog } = require('./lib/usage-meter');
 const { createCheckoutSession, constructWebhookEvent } = require('./lib/checkout');
 const { findOrCreateAccount } = require('./lib/accounts-repo');
-const { getFreeVerdict, createFreeVerdict } = require('./lib/free-verdicts-repo');
+const { getFreeVerdict, getLatestFreeVerdictForIdea, createFreeVerdict } = require('./lib/free-verdicts-repo');
 const { produceFreeVerdict } = require('./lib/free-verdict');
 const { buildCompetitiveAnalysis } = require('./lib/competitive');
+const { sseFrame, findingEvent, buildMockStreamSequence } = require('./lib/free-verdict-stream');
+const { buildCardData } = require('./lib/card-data');
+const { buildSampleReport } = require('./lib/sample-report');
+const { getChecks, setCheck } = require('./lib/next-step-checks-repo');
+const { assembleSixAnswers } = require('./lib/report-answers');
+const { reportToPdf, reportToXlsx } = require('./lib/report-export');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -474,6 +480,126 @@ app.post('/ideas/:id/validate', async (req, res) => {
 
 // The free verdict. Requires an account_ref so the one-per-(account, idea) rule
 // is enforced. A second attempt on the same pair is blocked (409) pending unlock.
+// The LIVE free-verdict stream (The Professor's Stage, Screen 3). Runs the quick
+// pass and emits, over Server-Sent Events: a `finding` event per dimension as it
+// settles (real observed counts), a `progress` event with the running source
+// count, then a terminal `verdict` event carrying the same payload the blocking
+// endpoint returns. `?mock=1` replays a seeded, credit-free sequence so the wait
+// screen is inspectable offline with NO LLM call (and touches no DB).
+app.get('/ideas/:id/free-verdict/stream', async (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive'
+  });
+  res.flushHeaders && res.flushHeaders();
+
+  const send = (event, data) => res.write(sseFrame(event, data));
+
+  // Mock mode: replay the seeded sequence, no DB, no LLM. This is the path the
+  // Done-When verifies (credits are empty).
+  if (req.query.mock === '1' || req.query.mock === 'true') {
+    for (const ev of buildMockStreamSequence()) {
+      send(ev.event, ev.data);
+    }
+    send('done', { ok: true });
+    return res.end();
+  }
+
+  // Real mode: mirrors the blocking POST endpoint's guard rails, but streams.
+  try {
+    const idea = await getIdeaById(req.params.id);
+    if (!idea) {
+      send('error', { error: 'Idea not found.' });
+      return res.end();
+    }
+
+    const accountRef = (req.query.account_ref) || idea.account_ref;
+    if (!accountRef && !idea.account_id) {
+      send('error', { error: 'account_ref is required for a free verdict.' });
+      return res.end();
+    }
+
+    let accountId = idea.account_id;
+    if (!accountId) {
+      const account = await findOrCreateAccount(accountRef);
+      accountId = account.id;
+    }
+
+    // FR-1.9: one free verdict per (account, idea).
+    const existing = await getFreeVerdict(accountId, idea.id);
+    if (existing) {
+      send('blocked', {
+        error: 'This idea already used its one free verdict on this account.',
+        unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` }
+      });
+      return res.end();
+    }
+
+    // Stream each dimension's finding as it settles; keep the running counter.
+    let cumulativeSources = 0;
+    const free = await produceFreeVerdict(idea, {
+      onDimension: (r) => {
+        cumulativeSources += r.sources_examined || 0;
+        send('finding', findingEvent(r, cumulativeSources));
+      }
+    });
+    send('progress', { sources_examined: cumulativeSources, dimensions_complete: free.shallow.dimensions.length });
+    console.log(`[cost] free-verdict(stream) idea=${idea.id} account=${accountId} — ${formatUsageLog(free.cost)}`);
+
+    let row;
+    try {
+      row = await createFreeVerdict({
+        accountId,
+        ideaId: idea.id,
+        verdict: free.verdict,
+        totalScore: free.total_score,
+        roast: free.roast,
+        payload: {
+          quick_pass_label: free.shallow.quick_pass_label,
+          shallow: free.shallow,
+          locked_sections: free.locked_sections,
+          sarcasm_dial: free.sarcasm_dial,
+          sensitive_input: free.sensitive_input,
+          regenerated: free.regenerated,
+          cost: free.cost
+        }
+      });
+    } catch (e) {
+      if (e.code === 'FREE_VERDICT_EXISTS') {
+        send('blocked', { error: 'This idea already used its one free verdict on this account.' });
+        return res.end();
+      }
+      throw e;
+    }
+
+    send('verdict', {
+      idea_id: idea.id,
+      free_verdict_id: row.id,
+      tier: 'free',
+      quick_pass_label: free.shallow.quick_pass_label,
+      verdict: free.verdict,
+      total_score: free.total_score,
+      roast: free.roast,
+      locked_sections: free.locked_sections,
+      unlock: { action: 'Unlock your next steps + full report', checkout: `/ideas/${idea.id}/checkout` },
+      sarcasm_dial: free.sarcasm_dial,
+      sensitive_input: free.sensitive_input,
+      cost: free.cost.totals
+    });
+    send('done', { ok: true });
+    res.end();
+  } catch (err) {
+    if (err.code === 'GUARDRAIL_RESIDUAL') {
+      send('error', { error: 'Free verdict failed guardrail screening.', violations: err.violations });
+    } else {
+      console.error('free verdict stream error:', err);
+      send('error', { error: 'Failed to produce free verdict.' });
+    }
+    res.end();
+  }
+});
+
 app.post('/ideas/:id/free-verdict', async (req, res) => {
   const idea = await getIdeaById(req.params.id);
   if (!idea) {
@@ -589,6 +715,9 @@ app.get('/ideas/:id/report', async (req, res) => {
     const evidence = await getEvidenceForIdea(idea.id);
     const competitive = buildCompetitiveAnalysis({ evidence });
     const receipts = buildReceipts({ idea, evidence, verdict });
+    // Screen 5 "The Six Answers": 1–4 from evidence/competitive, 5–6 the deep
+    // run's schema-enforced generated fields (verdicts.six_answers).
+    const sixAnswers = assembleSixAnswers({ idea, evidence, competitive, sixAnswers: verdict.six_answers });
 
     // Lead with the next steps (FR-1.10 / §3.2), then competitive, then evidence.
     res.status(200).json({
@@ -597,6 +726,7 @@ app.get('/ideas/:id/report', async (req, res) => {
       verdict: verdict.verdict,
       total_score: Number(verdict.total_score),
       next_steps: verdict.next_steps || [],
+      six_answers: sixAnswers,
       competitive_analysis: competitive,
       evidence_receipts: receipts,
       roast: verdict.voice_pass_output,
@@ -605,6 +735,206 @@ app.get('/ideas/:id/report', async (req, res) => {
   } catch (err) {
     console.error('report error:', err);
     res.status(500).json({ error: 'Failed to assemble full report.' });
+  }
+});
+
+// ─── The Professor's Stage: card data, sample report, checkbox state ─────────────
+
+// Screen 4 verdict-card data: the comedic REAL-data fields for the matching
+// verdict format (obituary / driving-test / certificate) + letterhead + the
+// "1 of N this month" count. Free tier — no payment required. Prefers the deep
+// verdict; falls back to the idea's free verdict (the reveal fires right after it).
+app.get('/ideas/:id/card-data', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+
+  try {
+    const deep = await getLatestVerdictForIdea(idea.id);
+    let verdict; let scores; let evidence; let createdAt; let verdictNumber;
+
+    if (deep) {
+      evidence = await getEvidenceForIdea(idea.id);
+      scores = computeScores(evidence);
+      verdict = deep.verdict;
+      createdAt = deep.created_at;
+      verdictNumber = String(deep.id).slice(0, 8).toUpperCase();
+    } else {
+      const free = await getLatestFreeVerdictForIdea(idea.id);
+      if (!free) return res.status(409).json({ error: 'No verdict yet. Produce a free verdict first.' });
+      // The free tier's shallow evidence lives in the payload, not the evidence table.
+      evidence = (free.payload && free.payload.shallow && free.payload.shallow.evidence) || [];
+      scores = computeScores(evidence);
+      verdict = free.verdict;
+      createdAt = free.created_at;
+      verdictNumber = String(free.id).slice(0, 8).toUpperCase();
+    }
+
+    const elapsedMs = idea.created_at && createdAt
+      ? Math.max(0, new Date(createdAt).getTime() - new Date(idea.created_at).getTime())
+      : 0;
+    const buildsThisMonth = verdict === 'BUILD' ? await countBuildVerdictsThisMonth() : undefined;
+
+    const cardData = buildCardData({ idea, verdict, scores, evidence, elapsedMs, verdictNumber, buildsThisMonth });
+    res.status(200).json(cardData);
+  } catch (err) {
+    console.error('card-data error:', err);
+    res.status(500).json({ error: 'Failed to build card data.' });
+  }
+});
+
+// A permanently public, complete six-answer sample report (seeded data). No auth,
+// no payment — lets a visitor see the full paid product before buying, and keeps
+// the report UI inspectable offline (no LLM call).
+app.get('/sample', (req, res) => {
+  try {
+    res.status(200).json(buildSampleReport());
+  } catch (err) {
+    console.error('sample report error:', err);
+    res.status(500).json({ error: 'Failed to build sample report.' });
+  }
+});
+
+// Public sample exports — the /sample report as PDF / Excel, no gate. Lets the
+// Screen 5 download buttons be inspected offline (no LLM, no purchase) and mirrors
+// the real report.pdf / report.xlsx exactly (same generator).
+app.get('/sample/report.pdf', async (req, res) => {
+  try {
+    const pdf = await reportToPdf(buildSampleReport());
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="professor-viva-sample.pdf"' });
+    res.status(200).send(pdf);
+  } catch (err) {
+    console.error('sample report.pdf error:', err);
+    res.status(500).json({ error: 'Failed to generate sample PDF.' });
+  }
+});
+
+app.get('/sample/report.xlsx', async (req, res) => {
+  try {
+    const xlsx = await reportToXlsx(buildSampleReport());
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="professor-viva-sample.xlsx"'
+    });
+    res.status(200).send(xlsx);
+  } catch (err) {
+    console.error('sample report.xlsx error:', err);
+    res.status(500).json({ error: 'Failed to generate sample Excel.' });
+  }
+});
+
+// Persisted next-step checkbox state for the unlocked report (per account).
+// GET returns the { step_index: checked } map; PUT upserts one step's state.
+app.get('/ideas/:id/report/checks', async (req, res) => {
+  const accountRef = req.query.account_ref;
+  if (!accountRef) return res.status(400).json({ error: 'account_ref is required.' });
+  try {
+    const idea = await getIdeaById(req.params.id);
+    if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+    const verdict = await getLatestVerdictForIdea(idea.id);
+    if (!verdict) return res.status(409).json({ error: 'No verdict yet.' });
+    const account = await findOrCreateAccount(accountRef);
+    const checks = await getChecks(account.id, verdict.id);
+    res.status(200).json({ verdict_id: verdict.id, checks });
+  } catch (err) {
+    console.error('get checks error:', err);
+    res.status(500).json({ error: 'Failed to read checkbox state.' });
+  }
+});
+
+app.put('/ideas/:id/report/checks', async (req, res) => {
+  const accountRef = req.body && req.body.account_ref;
+  const stepIndex = req.body && req.body.step_index;
+  const checked = req.body && req.body.checked;
+  if (!accountRef) return res.status(400).json({ error: 'account_ref is required.' });
+  if (!Number.isInteger(stepIndex) || stepIndex < 0) return res.status(400).json({ error: 'step_index must be a non-negative integer.' });
+  if (typeof checked !== 'boolean') return res.status(400).json({ error: 'checked must be a boolean.' });
+  try {
+    const idea = await getIdeaById(req.params.id);
+    if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+    const verdict = await getLatestVerdictForIdea(idea.id);
+    if (!verdict) return res.status(409).json({ error: 'No verdict yet.' });
+    const account = await findOrCreateAccount(accountRef);
+    await setCheck(account.id, verdict.id, stepIndex, checked);
+    const checks = await getChecks(account.id, verdict.id);
+    res.status(200).json({ verdict_id: verdict.id, checks });
+  } catch (err) {
+    console.error('put check error:', err);
+    res.status(500).json({ error: 'Failed to save checkbox state.' });
+  }
+});
+
+// Assembles the unlocked report's data for export. Shared by the PDF + XLSX
+// routes. Enforces the SAME 402 unlock gate as GET /report; returns { locked }
+// or { notReady } so the route can map to the right status. No LLM call.
+async function assembleUnlockedReport(idea) {
+  const paidPurchases = await countPaidPurchases(idea.id);
+  if (paidPurchases < 1) return { locked: true };
+  const verdict = await getLatestVerdictForIdea(idea.id);
+  if (!verdict || !verdict.voice_pass_output) return { notReady: true };
+
+  const evidence = await getEvidenceForIdea(idea.id);
+  const competitive = buildCompetitiveAnalysis({ evidence });
+  const receipts = buildReceipts({ idea, evidence, verdict });
+  const six_answers = assembleSixAnswers({ idea, evidence, competitive, sixAnswers: verdict.six_answers });
+  return {
+    report: {
+      idea,
+      verdict: verdict.verdict,
+      total_score: Number(verdict.total_score),
+      roast: verdict.voice_pass_output,
+      next_steps: verdict.next_steps || [],
+      six_answers,
+      competitive_analysis: competitive,
+      evidence_receipts: receipts,
+      evidence
+    }
+  };
+}
+
+function gateExport(result, res) {
+  if (result.locked) {
+    res.status(402).json({ error: 'Locked. Unlock your next steps + full report to download.', locked: true });
+    return false;
+  }
+  if (result.notReady) {
+    res.status(409).json({ error: 'Full report not generated yet. Run POST /ideas/:id/validate after unlocking.' });
+    return false;
+  }
+  return true;
+}
+
+// PDF export — unlocked reports only (same 402 gate as /report).
+app.get('/ideas/:id/report.pdf', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+  try {
+    const result = await assembleUnlockedReport(idea);
+    if (!gateExport(result, res)) return;
+    const pdf = await reportToPdf(result.report);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="professor-viva-${idea.id}.pdf"` });
+    res.status(200).send(pdf);
+  } catch (err) {
+    console.error('report.pdf error:', err);
+    res.status(500).json({ error: 'Failed to generate PDF.' });
+  }
+});
+
+// Excel export (evidence table) — unlocked reports only.
+app.get('/ideas/:id/report.xlsx', async (req, res) => {
+  const idea = await getIdeaById(req.params.id);
+  if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+  try {
+    const result = await assembleUnlockedReport(idea);
+    if (!gateExport(result, res)) return;
+    const xlsx = await reportToXlsx(result.report);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="professor-viva-${idea.id}.xlsx"`
+    });
+    res.status(200).send(xlsx);
+  } catch (err) {
+    console.error('report.xlsx error:', err);
+    res.status(500).json({ error: 'Failed to generate Excel.' });
   }
 });
 

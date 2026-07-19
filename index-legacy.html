@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Professor Viva — Your idea. His judgment.</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .title-font {
+      font-family: 'Playfair Display', serif;
+    }
+
+    .professor-emoji {
+      display: inline-block;
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      15% { transform: translateX(-8px) rotate(-3deg); }
+      30% { transform: translateX(8px) rotate(3deg); }
+      45% { transform: translateX(-6px) rotate(-2deg); }
+      60% { transform: translateX(6px) rotate(2deg); }
+      75% { transform: translateX(-3px) rotate(-1deg); }
+      90% { transform: translateX(3px) rotate(1deg); }
+    }
+
+    @keyframes bounce-in {
+      0% { transform: scale(0.5); opacity: 0; }
+      60% { transform: scale(1.15); opacity: 1; }
+      80% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes clap {
+      0%, 100% { transform: scale(1) rotate(0deg); }
+      25% { transform: scale(1.2) rotate(-10deg); }
+      75% { transform: scale(1.2) rotate(10deg); }
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+
+    @keyframes typewriter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes metric-fill {
+      from { width: 0%; }
+    }
+
+    .shake { animation: shake 0.6s ease; }
+    .bounce-in { animation: bounce-in 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+    .clap { animation: clap 0.4s ease infinite; }
+    .float { animation: float 3s ease-in-out infinite; }
+    .fade-in { animation: typewriter 0.4s ease forwards; }
+    .metric-bar { animation: metric-fill 1s ease forwards; }
+
+    .card-shadow {
+      box-shadow: 0 25px 60px rgba(0,0,0,0.4), 0 8px 20px rgba(0,0,0,0.2);
+    }
+
+    .roast-text {
+      font-size: 1rem;
+      line-height: 1.75;
+      letter-spacing: 0.01em;
+    }
+
+    .metric-track {
+      background: #e5e0d8;
+      border-radius: 999px;
+      overflow: hidden;
+      height: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #2d2d2d 0%, #444 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #1a1a1a;
+      box-shadow: 0 0 0 3px rgba(26,26,26,0.1);
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .speech-bubble {
+      position: relative;
+      background: #1a1a1a;
+      color: #f5f0e8;
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-size: 0.875rem;
+      font-style: italic;
+    }
+
+    .speech-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 8px solid transparent;
+      border-top-color: #1a1a1a;
+      border-bottom: none;
+    }
+
+    .copy-btn {
+      transition: all 0.2s ease;
+    }
+
+    .copy-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    /* Mobile adjustments */
+    @media (max-width: 640px) {
+      .professor-emoji { font-size: 5rem !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 flex items-center justify-center p-4 py-12">
+
+  <div class="w-full max-w-xl">
+
+    <!-- Header above card -->
+    <div class="text-center mb-6">
+      <p class="text-gray-500 text-xs tracking-widest uppercase">Est. 1987 · Department of Harsh Realities</p>
+    </div>
+
+    <!-- Main card -->
+    <div class="bg-amber-50 rounded-3xl card-shadow overflow-hidden">
+
+      <!-- Card top stripe -->
+      <div class="h-1.5 bg-gradient-to-r from-gray-800 via-gray-600 to-gray-800"></div>
+
+      <div class="p-8 sm:p-10">
+
+        <!-- Title -->
+        <div class="text-center mb-8">
+          <h1 class="title-font text-4xl sm:text-5xl font-black text-gray-900 tracking-tight">
+            Professor Viva
+          </h1>
+          <p class="text-gray-500 mt-2 text-sm sm:text-base font-medium tracking-wide">
+            Your idea. His judgment.
+          </p>
+        </div>
+
+        <!-- Professor area -->
+        <div class="flex flex-col items-center mb-8">
+          <!-- Speech bubble (hidden initially) -->
+          <div id="speechBubble" class="speech-bubble mb-4 hidden text-center max-w-xs">
+            <span id="speechText"></span>
+          </div>
+
+          <!-- Professor emoji -->
+          <div id="professorWrap" class="professor-emoji text-8xl sm:text-9xl float select-none" title="Professor Viva">
+            👨🏽‍🏫
+          </div>
+        </div>
+
+        <!-- Input area -->
+        <div id="inputSection">
+          <label class="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+            Your Startup Idea
+          </label>
+          <textarea
+            id="ideaInput"
+            rows="4"
+            placeholder="Enter your startup idea..."
+            class="w-full bg-white border-2 border-gray-200 rounded-xl p-4 text-gray-800 text-sm resize-none transition-all duration-200"
+            maxlength="2000"
+          ></textarea>
+          <div class="flex justify-between items-center mt-1 mb-5">
+            <span class="text-xs text-gray-400">Be specific. He will be specific back.</span>
+            <span id="charCount" class="text-xs text-gray-400">0/2000</span>
+          </div>
+
+          <button
+            id="presentBtn"
+            class="btn-primary w-full text-white font-semibold py-4 px-6 rounded-xl text-sm tracking-wide"
+            onclick="presentIdea()"
+          >
+            Present to Professor
+          </button>
+        </div>
+
+        <!-- Result area (hidden initially) -->
+        <div id="resultSection" class="hidden">
+
+          <!-- Roast card -->
+          <div id="roastCard" class="bg-white rounded-2xl p-6 mb-6 border border-gray-100 fade-in">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="badge text-gray-500">The Verdict</span>
+              <div class="flex-1 h-px bg-gray-200"></div>
+              <span id="moodBadge" class="badge text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full"></span>
+            </div>
+            <p id="roastText" class="roast-text text-gray-800"></p>
+          </div>
+
+          <!-- Metrics -->
+          <div id="metricsSection" class="mb-6 hidden">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="badge text-gray-500">Academic Assessment</span>
+              <div class="flex-1 h-px bg-gray-200"></div>
+            </div>
+            <div class="space-y-3">
+              <div class="metric-row">
+                <div class="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                  <span>Originality</span>
+                  <span id="originalityVal"></span>
+                </div>
+                <div class="metric-track">
+                  <div id="originalityBar" class="h-full rounded-full bg-blue-400 metric-bar" style="width:0%"></div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <div class="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                  <span>Execution Difficulty</span>
+                  <span id="executionVal"></span>
+                </div>
+                <div class="metric-track">
+                  <div id="executionBar" class="h-full rounded-full bg-red-400 metric-bar" style="width:0%"></div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <div class="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                  <span>Founder Delusion</span>
+                  <span id="delusionVal"></span>
+                </div>
+                <div class="metric-track">
+                  <div id="delusionBar" class="h-full rounded-full bg-purple-400 metric-bar" style="width:0%"></div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <div class="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                  <span>Survival Probability</span>
+                  <span id="survivalVal"></span>
+                </div>
+                <div class="metric-track">
+                  <div id="survivalBar" class="h-full rounded-full bg-green-400 metric-bar" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div id="actionBtns" class="hidden space-y-3">
+            <button
+              id="copyBtn"
+              onclick="copyRoast()"
+              class="copy-btn w-full border-2 border-gray-800 text-gray-800 font-semibold py-3 px-6 rounded-xl text-sm tracking-wide hover:bg-gray-800 hover:text-white transition-all duration-200"
+            >
+              📋 Copy Roast
+            </button>
+            <button
+              onclick="resetForm()"
+              class="w-full text-gray-400 hover:text-gray-700 font-medium py-2 text-sm transition-colors duration-200"
+            >
+              Try another idea →
+            </button>
+          </div>
+
+          <!-- Footer credit -->
+          <p class="text-center text-gray-400 text-xs mt-6 tracking-wide">
+            Roasted by Professor Viva
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-6">
+      <p class="text-gray-700 text-xs">No startups were funded in the making of this roast.</p>
+    </div>
+
+  </div>
+
+  <script>
+    // ─── State ──────────────────────────────────────────────────────────────────
+    let currentRoast = '';
+    let audioPlaying = false;
+
+    // ─── Char counter ───────────────────────────────────────────────────────────
+    const ideaInput = document.getElementById('ideaInput');
+    const charCount = document.getElementById('charCount');
+
+    ideaInput.addEventListener('input', () => {
+      charCount.textContent = `${ideaInput.value.length}/2000`;
+    });
+
+    ideaInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) presentIdea();
+    });
+
+    // ─── Professor emoji states ──────────────────────────────────────────────────
+    function setEmoji(emoji, animation) {
+      const el = document.getElementById('professorWrap');
+      el.textContent = emoji;
+      el.className = `professor-emoji text-8xl sm:text-9xl select-none`;
+      if (animation) {
+        void el.offsetWidth; // reflow to restart animation
+        el.classList.add(animation);
+        el.addEventListener('animationend', () => {
+          el.classList.remove(animation);
+          if (animation !== 'float') el.classList.add('float');
+        }, { once: true });
+      }
+    }
+
+    function setSpeech(text) {
+      const bubble = document.getElementById('speechBubble');
+      const speechEl = document.getElementById('speechText');
+      if (text) {
+        speechEl.textContent = text;
+        bubble.classList.remove('hidden');
+        bubble.classList.add('fade-in');
+      } else {
+        bubble.classList.add('hidden');
+        bubble.classList.remove('fade-in');
+      }
+    }
+
+    // ─── Main flow ───────────────────────────────────────────────────────────────
+    async function presentIdea() {
+      const idea = ideaInput.value.trim();
+      if (!idea) {
+        ideaInput.focus();
+        ideaInput.classList.add('border-red-400');
+        setTimeout(() => ideaInput.classList.remove('border-red-400'), 1500);
+        return;
+      }
+
+      const btn = document.getElementById('presentBtn');
+      btn.disabled = true;
+      btn.textContent = 'The Professor is thinking…';
+
+      // Phase 1: suspicious
+      setEmoji('🤨', 'bounce-in');
+      setSpeech('Hmm… let me see.');
+
+      // Kick off the API call immediately
+      const roastPromise = fetch('/roast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea })
+      }).then(r => r.json());
+
+      // Phase 2: disappointed
+      await delay(1800);
+      setEmoji('😑', 'bounce-in');
+      setSpeech('No… no… no.');
+
+      // Wait for API (minimum 3.5s total for drama)
+      const [roastData] = await Promise.all([roastPromise, delay(1700)]);
+
+      if (roastData.error) {
+        setSpeech('Something went wrong. Even the server is disappointed.');
+        setEmoji('😑', 'shake');
+        btn.disabled = false;
+        btn.textContent = 'Present to Professor';
+        return;
+      }
+
+      // Phase 3: final reaction
+      setEmoji(roastData.emoji || '😤', roastData.emoji === '👏' ? 'clap' : 'shake');
+      setSpeech(null);
+
+      // Show result
+      displayResult(roastData);
+
+      // Attempt TTS (fire-and-forget, graceful fail)
+      speakText(roastData.roast);
+    }
+
+    function displayResult(data) {
+      currentRoast = data.roast;
+
+      document.getElementById('inputSection').classList.add('hidden');
+      const resultSection = document.getElementById('resultSection');
+      resultSection.classList.remove('hidden');
+
+      // Roast text
+      document.getElementById('moodBadge').textContent = data.mood;
+      document.getElementById('roastText').textContent = data.roast;
+
+      // Metrics (reveal after short pause)
+      setTimeout(() => {
+        const metricsSection = document.getElementById('metricsSection');
+        metricsSection.classList.remove('hidden');
+        metricsSection.classList.add('fade-in');
+
+        setBar('originalityBar', 'originalityVal', data.originality, 10, '/10');
+        setBar('executionBar', 'executionVal', data.execution, 10, '/10');
+        setBar('delusionBar', 'delusionVal', data.delusion, 10, '/10');
+        setBar('survivalBar', 'survivalVal', data.survival, 100, '%');
+
+        setTimeout(() => {
+          document.getElementById('actionBtns').classList.remove('hidden');
+          document.getElementById('actionBtns').classList.add('fade-in');
+        }, 600);
+      }, 500);
+    }
+
+    function setBar(barId, valId, value, max, suffix) {
+      const pct = Math.min((value / max) * 100, 100);
+      const barEl = document.getElementById(barId);
+      const valEl = document.getElementById(valId);
+      valEl.textContent = `${value}${suffix}`;
+      // Force reflow before setting width so animation triggers
+      barEl.style.width = '0%';
+      void barEl.offsetWidth;
+      barEl.style.width = `${pct}%`;
+      barEl.style.transition = 'width 1s ease';
+    }
+
+    // ─── TTS ─────────────────────────────────────────────────────────────────────
+    async function speakText(text) {
+      if (audioPlaying) return;
+      try {
+        const response = await fetch('/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (!response.ok) return; // TTS not configured — silent fail
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioPlaying = true;
+        audio.play();
+        audio.onended = () => {
+          audioPlaying = false;
+          URL.revokeObjectURL(url);
+        };
+      } catch {
+        // TTS unavailable — silent fail, no disruption
+      }
+    }
+
+    // ─── Copy roast ──────────────────────────────────────────────────────────────
+    async function copyRoast() {
+      const copyBtn = document.getElementById('copyBtn');
+      try {
+        await navigator.clipboard.writeText(
+          `"${currentRoast}"\n\n— Professor Viva`
+        );
+        copyBtn.textContent = '✅ Copied!';
+      } catch {
+        copyBtn.textContent = '❌ Copy failed';
+      }
+      setTimeout(() => { copyBtn.textContent = '📋 Copy Roast'; }, 2000);
+    }
+
+    // ─── Reset ───────────────────────────────────────────────────────────────────
+    function resetForm() {
+      document.getElementById('resultSection').classList.add('hidden');
+      document.getElementById('inputSection').classList.remove('hidden');
+      document.getElementById('metricsSection').classList.add('hidden');
+      document.getElementById('metricsSection').classList.remove('fade-in');
+      document.getElementById('actionBtns').classList.add('hidden');
+
+      const btn = document.getElementById('presentBtn');
+      btn.disabled = false;
+      btn.textContent = 'Present to Professor';
+
+      ideaInput.value = '';
+      charCount.textContent = '0/2000';
+
+      setEmoji('👨🏽‍🏫', null);
+      document.getElementById('professorWrap').classList.add('float');
+      setSpeech(null);
+
+      currentRoast = '';
+    }
+
+    // ─── Util ────────────────────────────────────────────────────────────────────
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+  </script>
+</body>
+</html>
