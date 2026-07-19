@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Professor Viva — The Professor's Stage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Professor Viva: The Professor's Stage</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#201D13" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Professor Viva" />
+<link rel="apple-touch-icon" href="/public/icon-192.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -43,6 +49,11 @@
     border:1.5px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
     border-radius:16px; padding:16px 20px;
   }
+  /* Text bubbles hug their content — no oversized bubble with a lonely line in
+     it. (Input-bearing bubbles keep their own width and are excluded.) */
+  .bubble.q-line, .bubble.react-bubble{ width:fit-content; max-width:min(560px,100%); }
+  .exchange .bubble.tail-user{ width:fit-content; max-width:min(520px,100%); margin-left:auto; }
+  .bubble.q-line .serif{ font-size:1.2rem; line-height:1.4; }
   /* professor bubble tail → points down-left toward his mouth */
   .bubble.tail-prof::after{
     content:''; position:absolute; left:34px; bottom:-15px; width:0; height:0;
@@ -92,9 +103,6 @@
     height:340px; width:auto; user-select:none; -webkit-user-drag:none;
     transform-origin:center bottom;
     transition:transform .35s cubic-bezier(.34,1.56,.64,1);
-    /* Assets ship with a light checkerboard baked into opaque pixels; multiply
-       blends that light background into the cream while the black ink survives. */
-    mix-blend-mode:multiply;
   }
   @media (max-width:640px){ .prof{ height:40vh; } .caption{ font-size:.95rem; } }
 
@@ -171,7 +179,7 @@
   @keyframes slide-up{ 0%{ opacity:0; transform:translateY(60px) scale(.96) } 100%{ opacity:1; transform:none } }
   .vcard.gold{ border-color:var(--gold); box-shadow:6px 8px 0 var(--gold); }
   .lh{ display:flex; align-items:center; gap:10px; border-bottom:1.5px solid var(--ink); padding-bottom:10px; }
-  .lh img{ height:46px; width:46px; object-fit:contain; border:1.5px solid var(--ink); background:var(--cream); border-radius:6px; mix-blend-mode:multiply; }
+  .lh img{ height:46px; width:46px; object-fit:contain; border:1.5px solid var(--ink); background:var(--cream); border-radius:6px; }
   .lh .t{ font-family:'Playfair Display',serif; font-weight:900; font-size:.9rem; line-height:1.1; }
   .lh .d{ font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .lh .vn{ margin-left:auto; font-size:.6rem; color:var(--muted); text-align:right; }
@@ -195,6 +203,11 @@
   .stamp.charcoal{ border-color:var(--ink); color:var(--ink); }
   .stamp.gold{ border-color:var(--gold); color:var(--gold); }
   .stamp.green{ border-color:var(--green); color:var(--green); }
+  /* Format joke printed small, beneath the verdict word, inside the stamp. */
+  .stamp .stamp-sub{
+    display:block; margin-top:5px; font-family:'Inter',sans-serif; font-weight:600;
+    font-size:.42rem; letter-spacing:.02em; text-transform:none; text-align:center; line-height:1.2;
+  }
   .stamp.slam{ animation:slam .45s cubic-bezier(.3,1.4,.5,1) forwards; }
   @keyframes slam{ 0%{ opacity:0; transform:translate(-50%,-50%) rotate(-14deg) scale(3.2) } 70%{ opacity:1 } 100%{ opacity:.92; transform:translate(-50%,-50%) rotate(-14deg) scale(1) } }
   .shake{ animation:shake .3s ease; }
@@ -212,7 +225,7 @@
   /* ── Screen 5 report ─────────────────────────────────────────────────────── */
   .report{ max-width:720px; margin:0 auto; }
   .report-head{ display:flex; align-items:center; gap:12px; border-bottom:1.5px solid var(--ink); padding-bottom:14px; margin-bottom:8px; }
-  .cameo{ height:44px; width:44px; object-fit:contain; border:1.5px solid var(--ink); border-radius:6px; background:var(--cream); mix-blend-mode:multiply; }
+  .cameo{ height:44px; width:44px; object-fit:contain; border:1.5px solid var(--ink); border-radius:6px; background:var(--cream); }
   .report-head .rt{ font-family:'Playfair Display',serif; font-weight:900; font-size:1.05rem; }
   .report-head .dl{ margin-left:auto; display:flex; gap:10px; }
   .answer{ padding:20px 0; border-bottom:1px solid var(--hairline); }
@@ -233,10 +246,26 @@
   .top-note{ position:fixed; top:0; left:0; right:0; background:var(--ink); color:var(--caption); font-size:.72rem; text-align:center; padding:5px; z-index:50; letter-spacing:.03em; }
   body.has-note .stage{ padding-top:64px; }
   .hidden{ display:none !important; }
+
+  /* ── Mobile-first (verified at 390px) ────────────────────────────────────── */
+  @media (max-width:720px){
+    .stage{ padding:20px 16px 48px; }
+    body.has-note .stage{ padding-top:60px; }
+    /* Screen 2 & 3 stack: professor sits above the dialogue, not beside it. */
+    #screen2 > div, #screen3 > div{ grid-template-columns:1fr !important; }
+    #screen2 .prof-wrap, #screen3 .prof-wrap{ order:-1; }
+    #screen2 .prof, #screen3 .prof{ height:180px !important; position:static !important; }
+    .caption{ max-width:100%; font-size:.98rem; }
+    .bubble.q-line, .exchange .bubble.tail-user, .bubble.react-bubble{ max-width:100%; }
+    .reveal-line{ font-size:1.12rem; }
+    .report-head{ flex-wrap:wrap; }
+    .report-head .dl{ margin-left:0; width:100%; }
+    .report-head .dl .btn{ flex:1; text-align:center; }
+  }
 </style>
 </head>
 <body>
-<div id="demoNote" class="top-note hidden">DEMO MODE — seeded, credit-free. Add <code>?live=1</code> to run against the live pipeline.</div>
+<div id="demoNote" class="top-note hidden">DEMO MODE. Seeded, credit-free. Add <code>?live=1</code> to run against the live pipeline.</div>
 
 <div class="stage" id="stage">
 
@@ -251,7 +280,7 @@
         </div>
         <div class="pop d3" style="margin-top:24px;">
           <button class="btn primary" id="presentBtn" onclick="presentIdea()">Present to the Professor</button>
-          <div class="price">One verdict, free. The full report is ₹1,499 / $39 — one time.</div>
+          <div class="price">One verdict, free. The full report is ₹1,499 / $39, one time.</div>
         </div>
       </div>
       <div class="prof-wrap" id="profWrap1">
@@ -331,6 +360,13 @@
 const PARAMS = new URLSearchParams(location.search);
 const LIVE = PARAMS.has('live');
 if (!LIVE){ document.getElementById('demoNote').classList.remove('hidden'); document.body.classList.add('has-note'); }
+
+// "From Zero to Running App" guide URL — configurable server-side (never
+// hardcoded copy). The BUILD report ends with a bridge that links here.
+let GUIDE_URL = 'https://professorviva.com/guide/zero-to-running-app';
+fetch('/public-config').then(r => r.ok ? r.json() : null)
+  .then(cfg => { if (cfg && cfg.guide_url) GUIDE_URL = cfg.guide_url; })
+  .catch(() => {});
 
 // A stable per-browser account handle (live tier one-free-verdict rule).
 function accountRef(){
@@ -430,13 +466,13 @@ function presentIdea(){
 /* ── SCREEN 2 — questioning ───────────────────────────────────────────────── */
 const QUESTIONS = [
   { field:'problem',
-    q:'A whole app in one sentence. Bold. Now — what problem does it actually solve, and how badly does it hurt?',
+    q:'A whole app in one sentence. Bold. Now, what problem does it actually solve, and how badly does it hurt?',
     skippable:false },
   { field:'audience',
-    q:'And who exactly pays for this? Not who uses it — who enters the credit card. They are rarely the same person.',
+    q:'And who exactly pays for this? Not who uses it. Who enters the credit card. They are rarely the same person.',
     skippable:false },
   { field:'monetization_hypothesis',
-    q:'What will you charge, and how? A guess is acceptable. "I\'ll figure it out later" is also an answer — just not a good one.',
+    q:'What will you charge, and how? A guess is acceptable. "I\'ll figure it out later" is also an answer, just not a good one.',
     skippable:true },
   { field:'unfair_advantage',
     q:'Last one. Why you? What do you know, own, or have lived that the other fourteen people building this do not?',
@@ -460,17 +496,17 @@ const MICRO_ROASTS = {
     { kw:['startup','founder','entrepreneur'], line:'Founders. A market famous for wanting everything and paying for nothing.' },
     { kw:['student','young','gen z'], line:'Students. Enormous enthusiasm, empty wallets. Choose knowingly.' },
     { kw:['enterprise','b2b','business','company'], line:'Enterprise. Long sales cycles, longer meetings. I hope you like procurement.' },
-    { kw:['small business','smb','local'], line:'Small businesses. They pay — reluctantly, and only when it hurts not to.' },
+    { kw:['small business','smb','local'], line:'Small businesses. They pay, reluctantly, and only when it hurts not to.' },
     { kw:['developer','engineer','technical'], line:'Developers. They will love it, fork it, and never pay you a rupee.' },
     { kw:['consumer','user','individual'], line:'Consumers. Fickle, distracted, and one notification away from forgetting you exist.' },
     { kw:[], line:'A payer, at last. The person with the credit card is the only audience that matters.' }
   ],
   monetization_hypothesis: [
     { kw:['free','freemium','ads'], line:'Free. The word investors love to hear and hate to fund.' },
-    { kw:['subscription','saas','monthly','mrr'], line:'Subscriptions. Recurring revenue, or recurring cancellations — depends entirely on the value.' },
+    { kw:['subscription','saas','monthly','mrr'], line:'Subscriptions. Recurring revenue, or recurring cancellations. Depends entirely on the value.' },
     { kw:['later','figure','not sure','tbd'], line:'"Figure it out later." Bold of you to build first and price never.' },
     { kw:['cheap','low','99','affordable'], line:'Racing to the bottom on price. There is always someone happy to charge less and die faster.' },
-    { kw:['premium','expensive','high'], line:'Premium pricing. Excellent — provided the value clears the same bar.' },
+    { kw:['premium','expensive','high'], line:'Premium pricing. Excellent, provided the value clears the same bar.' },
     { kw:['commission','fee','transaction','%'], line:'A cut of the transaction. Fine, once there are transactions to cut.' },
     { kw:['enterprise','license','seat'], line:'Per-seat licensing. Now you sell to the buyer AND the finance team. Twice the fun.' },
     { kw:[], line:'A number, at least. A guess is a hypothesis; silence is a surrender.' }
@@ -508,10 +544,10 @@ function startQuestion(i){
   wrap.className = 'exchange';
   wrap.id = 'ex'+i;
   const skipHtml = Q.skippable
-    ? `<button class="linkish muted" onclick="skipQuestion(${i})">Skip — the professor will judge accordingly.</button>` : '';
+    ? `<button class="linkish muted" onclick="skipQuestion(${i})">Skip. The professor will judge accordingly.</button>` : '';
   wrap.innerHTML = `
-    <div class="bubble tail-prof q-line" style="max-width:560px;">
-      <span class="serif" style="font-size:1.08rem;">${Q.q}</span>
+    <div class="bubble tail-prof q-line">
+      <span class="serif">${Q.q}</span>
     </div>
     <textarea class="a-input" id="ans${i}" rows="2" placeholder="Your answer..."></textarea>
     <div style="margin-top:8px; display:flex; gap:12px; align-items:center;">
@@ -527,11 +563,11 @@ function startQuestion(i){
 
 function completeExchange(i, answer, reaction){
   const wrap = $('ex'+i);
-  wrap.querySelector('.a-input').outerHTML = `<div class="bubble tail-user" style="max-width:520px; margin-left:auto;">${escapeHtml(answer)}</div>`;
+  wrap.querySelector('.a-input').outerHTML = `<div class="bubble tail-user">${escapeHtml(answer)}</div>`;
   wrap.querySelectorAll('button').forEach(b=>b.remove());
   const rb = document.createElement('div');
   rb.className = 'bubble tail-prof react-bubble pop';
-  rb.style.maxWidth = '460px'; rb.style.marginTop = '12px';
+  rb.style.marginTop = '12px';
   rb.innerHTML = `<span class="serif">${escapeHtml(reaction)}</span>`;
   wrap.appendChild(rb);
   $('dot'+i).classList.add('filled');
@@ -589,18 +625,18 @@ async function finishQuestioning(){
 /* ── SCREEN 3 — the wait (SSE) ────────────────────────────────────────────── */
 const FINDING_VOICE = {
   demand: (f)=> f.signal_mix.supports > 0
-    ? `Demand — examined ${f.sources_examined} source${plural(f.sources_examined)}. ${f.signal_mix.supports} of them say people actually want this. Noted, grudgingly.`
-    : `Demand — ${f.sources_examined} source${plural(f.sources_examined)} examined, and the silence is deafening.`,
+    ? `Demand: examined ${f.sources_examined} source${plural(f.sources_examined)}. ${f.signal_mix.supports} of them say people actually want this. Noted, grudgingly.`
+    : `Demand: ${f.sources_examined} source${plural(f.sources_examined)} examined, and the silence is deafening.`,
   market_gap: (f)=> f.signal_mix.undermines > 0
-    ? `Market gap — found ${f.signal_mix.undermines} competitor${plural(f.signal_mix.undermines)} already in the room. Oh dear.`
-    : `Market gap — ${f.sources_examined} source${plural(f.sources_examined)} searched, and — surprisingly — there is room to stand.`,
-  monetization: (f)=> `Money — ${f.claim_count} pricing signal${plural(f.claim_count)} across ${f.sources_examined} source${plural(f.sources_examined)}. We shall see who actually pays.`,
+    ? `Market gap: found ${f.signal_mix.undermines} competitor${plural(f.signal_mix.undermines)} already in the room. Oh dear.`
+    : `Market gap: ${f.sources_examined} source${plural(f.sources_examined)} searched, and, surprisingly, there is room to stand.`,
+  monetization: (f)=> `Money: ${f.claim_count} pricing signal${plural(f.claim_count)} across ${f.sources_examined} source${plural(f.sources_examined)}. We shall see who actually pays.`,
   founder_fit: (f)=> f.status && f.status.startsWith('insufficient')
-    ? `Founder fit — ${f.sources_examined} source${plural(f.sources_examined)}, not enough signal to judge you. Yet.`
-    : `Founder fit — ${f.claim_count} thing${plural(f.claim_count)} suggest you might be the one to build this. Might.`,
+    ? `Founder fit: ${f.sources_examined} source${plural(f.sources_examined)}, not enough signal to judge you. Yet.`
+    : `Founder fit: ${f.claim_count} thing${plural(f.claim_count)} suggest you might be the one to build this. Might.`,
   timing: (f)=> f.signal_mix.supports > 0
-    ? `Timing — ${f.signal_mix.supports} signal${plural(f.signal_mix.supports)} say the window is open. For now.`
-    : `Timing — ${f.sources_examined} source${plural(f.sources_examined)}, and the clock is ambiguous.`
+    ? `Timing: ${f.signal_mix.supports} signal${plural(f.signal_mix.supports)} say the window is open. For now.`
+    : `Timing: ${f.sources_examined} source${plural(f.sources_examined)}, and the clock is ambiguous.`
 };
 function plural(n){ return n === 1 ? '' : 's'; }
 
@@ -713,7 +749,7 @@ function renderCardSequence(c){
   const pose = `/public/professor/${c.letterhead.pose}.png`;
   const vcard = $('vcard');
   vcard.className = 'vcard' + (c.accent === 'gold' ? ' gold' : '');
-  vcard.innerHTML = cardInner(c) + `<div class="stamp ${c.accent}" id="stamp">${c.stamp}</div>`;
+  vcard.innerHTML = cardInner(c) + `<div class="stamp ${c.accent}" id="stamp">${escapeHtml(c.stamp)}<span class="stamp-sub">${escapeHtml(c.stamp_subline||'')}</span></div>`;
 
   // 1. reveal line already shown → 2. card slides up
   vcard.classList.remove('slide'); void vcard.offsetWidth; vcard.classList.add('slide');
@@ -737,7 +773,7 @@ function cardInner(c){
         <div class="t">${c.letterhead.title}</div>
         <div class="d">${c.letterhead.department}</div>
       </div>
-      <div class="vn">No. ${c.letterhead.verdict_number || '—'}</div>
+      <div class="vn">${c.letterhead.verdict_number ? 'No. ' + escapeHtml(c.letterhead.verdict_number) : ''}</div>
     </div>`;
   const foot = `<div class="card-foot">${c.letterhead.footer}</div>`;
   let body = '';
@@ -757,7 +793,6 @@ function cardInner(c){
         <div class="big">${escapeHtml(c.failed_headline)}</div>
         <div class="row"><span class="lbl">Passed</span><br>${escapeHtml(c.passed_skill.skill)} <span class="sig">${c.passed_skill.score}/100</span></div>
         <div class="row"><span class="lbl">Failed</span><br>${escapeHtml(c.failed_skill.skill)} <span class="sig">${c.failed_skill.score}/100</span></div>
-        <div class="row" style="font-style:italic;">${escapeHtml(c.retake)}</div>
       </div>`;
   } else {
     body = `
@@ -827,7 +862,7 @@ function renderReport(r, exportBase, isSample){
       </div>
     </div>`;
 
-  if (isSample) html += `<div class="muted" style="font-size:.8rem; margin:10px 0;">Sample report — seeded, realistic data.</div>`;
+  if (isSample) html += `<div class="muted" style="font-size:.8rem; margin:10px 0;">Sample report. Seeded, realistic data.</div>`;
 
   html += `<div class="answer" style="border:none;">
       <div class="an">The verdict</div>
@@ -851,7 +886,7 @@ function renderReport(r, exportBase, isSample){
     }
     if (a.competitive && a.competitive.sections){
       for (const sec of a.competitive.sections){
-        html += `<div class="comp-sec"><div class="ch">${escapeHtml(sec.label)} — ${sec.score}/100</div>`;
+        html += `<div class="comp-sec"><div class="ch">${escapeHtml(sec.label)} · ${sec.score}/100</div>`;
         for (const cl of (sec.claims || [])){
           html += `<div class="claim">${escapeHtml(cl.claim)} <span class="sig">${cl.signal}</span>` +
                   (cl.source_url ? `<br><a href="${cl.source_url}" target="_blank" rel="noopener">${escapeHtml(cl.source_url)}</a>` : '') + `</div>`;
@@ -861,6 +896,16 @@ function renderReport(r, exportBase, isSample){
     }
     if (a.body) html += `<p>${escapeHtml(a.body)}</p>`;
     html += `</div>`;
+  }
+
+  // BUILD reports end with a bridge into the build guide (config URL).
+  if (String(r.verdict || '').toUpperCase() === 'BUILD'){
+    html += `<div class="answer build-bridge" style="border:none;">
+        <div class="an">The bridge</div>
+        <h3>Verdict says build.</h3>
+        <p style="margin-bottom:14px;">Here is exactly how, without a technical background:</p>
+        <a class="btn primary" href="${GUIDE_URL}" target="_blank" rel="noopener">Open: From Zero to Running App →</a>
+      </div>`;
   }
   el.innerHTML = html;
 
@@ -898,7 +943,7 @@ async function toggleStep(i, checked, isSample){
 /* ── Card share / download (free tier, no payment) ────────────────────────── */
 function shareCard(){
   const c = state.cardData; if (!c) return;
-  const text = `Professor Viva's verdict: ${c.verdict} — "${c.idea_name}". Get yours · professorviva.com`;
+  const text = `Professor Viva's verdict: ${c.verdict} on "${c.idea_name}". Get yours · professorviva.com`;
   if (navigator.share){ navigator.share({ title:'Professor Viva', text }).catch(()=>{}); }
   else { navigator.clipboard.writeText(text).then(()=>toast('Copied to clipboard')); }
 }
@@ -918,6 +963,7 @@ function downloadCard(){
   ctx.strokeStyle = c.accent==='gold' ? '#C4A44A' : c.accent==='green' ? '#3D5C35' : '#201D13';
   ctx.lineWidth = 8; ctx.font = '900 72px Georgia'; ctx.fillStyle = ctx.strokeStyle;
   const tw = ctx.measureText(c.stamp).width; ctx.strokeRect(-tw/2-20,-64,tw+40,88); ctx.fillText(c.stamp, -tw/2, 0);
+  if (c.stamp_subline){ ctx.font = '600 18px Georgia'; ctx.textAlign = 'center'; ctx.fillText(c.stamp_subline, 0, 32); ctx.textAlign = 'left'; }
   ctx.restore();
   ctx.fillStyle='#9a9587'; ctx.font='16px Georgia'; ctx.textAlign='center';
   ctx.fillText(c.letterhead.footer, 360, 840); ctx.textAlign='left';

@@ -794,6 +794,14 @@ app.get('/sample', (req, res) => {
   }
 });
 
+// Public, non-secret front-end config. Keeps user-facing URLs (like the build
+// guide the BUILD report bridges into) out of hardcoded copy and in env.
+app.get('/public-config', (req, res) => {
+  res.status(200).json({
+    guide_url: process.env.GUIDE_URL || 'https://professorviva.com/guide/zero-to-running-app'
+  });
+});
+
 // Public sample exports — the /sample report as PDF / Excel, no gate. Lets the
 // Screen 5 download buttons be inspected offline (no LLM, no purchase) and mirrors
 // the real report.pdf / report.xlsx exactly (same generator).

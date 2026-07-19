@@ -42,7 +42,8 @@ const scores = {
 check('BURY card renders the obituary format with real data', () => {
   const c = buildCardData({ idea, verdict: 'BURY', scores, evidence, elapsedMs: 3 * 3600 * 1000, verdictNumber: 'V1' });
   assert.strictEqual(c.format, 'obituary');
-  assert.strictEqual(c.stamp, 'BURIED');
+  assert.strictEqual(c.stamp, 'BURY');
+  assert.strictEqual(c.stamp_subline, 'Rest in peace.');
   assert.strictEqual(c.in_memory_of, idea.problem);
   assert.strictEqual(c.lifespan, '3 hours');
   assert(c.cause_of_death.includes('Rover') || c.cause_of_death.includes('Time To Pet'), 'cause = a real undermining claim');
@@ -53,17 +54,17 @@ check('BURY card renders the obituary format with real data', () => {
 check('PIVOT card renders driving-test with strongest/weakest real dimensions', () => {
   const c = buildCardData({ idea, verdict: 'PIVOT', scores, evidence, elapsedMs: 0, verdictNumber: 'V2' });
   assert.strictEqual(c.format, 'driving_test');
-  assert.strictEqual(c.stamp, 'RETAKE');
+  assert.strictEqual(c.stamp, 'PIVOT');
   assert.strictEqual(c.accent, 'gold');
   assert.strictEqual(c.passed_skill.dimension, 'demand', 'strongest scored dim');
   assert.strictEqual(c.failed_skill.dimension, 'market_gap', 'weakest scored dim');
-  assert(/1 free re-validation/.test(c.retake));
+  assert(/1 free re-validation/.test(c.stamp_subline), 'format joke moved to the stamp sub-line');
 });
 
 check('BUILD card renders certificate with "1 of N this month"', () => {
   const c = buildCardData({ idea, verdict: 'BUILD', scores, evidence, elapsedMs: 0, verdictNumber: 'V3', buildsThisMonth: 7 });
   assert.strictEqual(c.format, 'certificate');
-  assert.strictEqual(c.stamp, 'APPROVED');
+  assert.strictEqual(c.stamp, 'BUILD');
   assert.strictEqual(c.accent, 'green');
   assert.strictEqual(c.approved_line, 'Approved: 1 of 7 this month');
   assert.strictEqual(c.seal, true);
