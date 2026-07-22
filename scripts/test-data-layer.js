@@ -10,7 +10,11 @@ const { spawn } = require('child_process');
 const fetch = require('node-fetch');
 const { getSupabase } = require('../lib/db');
 
-const PORT = 4321;
+// Note: server.js uses dotenv's { override: true }, which means .env's
+// PORT=3000 wins over any PORT we pass through spawn's env — so we run on
+// the .env default port instead of trying to override it (same workaround as
+// test-evidence-pipeline.js).
+const PORT = process.env.PORT || 3000;
 const BASE_URL = `http://localhost:${PORT}`;
 
 function waitForServer(proc) {
