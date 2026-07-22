@@ -76,7 +76,7 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 });
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(process.cwd())));
 
 // ─── Intake (Step 1 schema + Step 2 persistence) ────────────────────────────────
 
