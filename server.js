@@ -78,6 +78,13 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 app.use(express.json());
 app.use(express.static(path.join(process.cwd())));
 
+// Explicit root route: on Vercel, express.static's default-index behavior
+// has proven unreliable at "/" through the serverless routing layer, so
+// serve index.html directly rather than relying on it implicitly.
+app.get('/', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'index.html'));
+});
+
 // ─── Intake (Step 1 schema + Step 2 persistence) ────────────────────────────────
 
 app.post('/ideas', async (req, res) => {
