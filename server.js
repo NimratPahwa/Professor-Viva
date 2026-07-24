@@ -85,6 +85,14 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'index.html'));
 });
 
+// Stripe redirects the user back to /checkout/success and /checkout/cancel
+// after the hosted Checkout Session. These are SPA landing paths — serve the
+// same index.html so the client can read ?session_id / ?idea_id from the URL
+// and either reload the report (success) or return to the reveal (cancel).
+app.get(['/checkout/success', '/checkout/cancel'], (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'index.html'));
+});
+
 // ─── Intake (Step 1 schema + Step 2 persistence) ────────────────────────────────
 
 app.post('/ideas', async (req, res) => {

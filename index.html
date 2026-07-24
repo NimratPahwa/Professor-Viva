@@ -97,6 +97,21 @@
   }
   .linkish.muted{ color:var(--muted); }
 
+  /* ── Back navigation (comic-palette chip; between-screen + within-screen) ─── */
+  .back-row{ margin:0 0 18px; }
+  .back-btn{
+    display:inline-flex; align-items:center; gap:8px;
+    border:1.5px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+    background:var(--caption); color:var(--ink);
+    padding:7px 14px; font-family:'Inter',sans-serif; font-weight:600; font-size:.85rem;
+    border-radius:999px; cursor:pointer;
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .back-btn:hover{ transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); }
+  .back-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+  .back-btn .arrow{ font-family:'Playfair Display',serif; font-size:1rem; line-height:1; }
+  .back-btn.q-back{ margin-top:10px; }
+
   /* ── Professor (the protagonist) ─────────────────────────────────────────── */
   .prof-wrap{ position:relative; display:flex; justify-content:center; }
   .prof{
@@ -297,6 +312,11 @@
 
   <!-- ══ SCREEN 2 — QUESTIONING ═══════════════════════════════════════════ -->
   <section class="screen" id="screen2">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen1')" aria-label="Back to the idea">
+        <span class="arrow">←</span> Back to the idea
+      </button>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start;">
       <div>
         <div class="caption" style="margin-bottom:20px;">The professor leans in. The questioning begins.</div>
@@ -312,6 +332,11 @@
 
   <!-- ══ SCREEN 3 — THE WAIT ══════════════════════════════════════════════ -->
   <section class="screen" id="screen3">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen2')" aria-label="Back to the questioning">
+        <span class="arrow">←</span> Back to the questioning
+      </button>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start;">
       <div>
         <div class="caption" style="margin-bottom:20px;">Meanwhile, in the professor's study...</div>
@@ -329,6 +354,11 @@
 
   <!-- ══ SCREEN 4 — THE REVEAL ════════════════════════════════════════════ -->
   <section class="screen" id="screen4">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen3')" aria-label="Back to the study">
+        <span class="arrow">←</span> Back to the study
+      </button>
+    </div>
     <div class="reveal-line" id="revealLine">The professor has reached a verdict.</div>
     <div class="card-hold">
       <div class="vcard" id="vcard"><div class="stamp" id="stamp"></div></div>
@@ -349,6 +379,11 @@
 
   <!-- ══ SCREEN 5 — THE SIX ANSWERS ═══════════════════════════════════════ -->
   <section class="screen" id="screen5">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen4')" aria-label="Back to the verdict">
+        <span class="arrow">←</span> Back to the verdict
+      </button>
+    </div>
     <div class="report" id="report"></div>
   </section>
 
@@ -388,7 +423,8 @@ const state = {
   verdict: null,            // 'BUILD'|'PIVOT'|'BURY'
   cardData: null,
   lockedSections: [],
-  report: null
+  report: null,
+  answers: ['', '', '', '']  // per-question drafts, preserved across back-navigation
 };
 
 const $ = (id) => document.getElementById(id);
@@ -397,6 +433,21 @@ function show(screenId){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(screenId).classList.add('active');
   window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+// Between-screen back. Rebuilds Screen 2 from saved answers so the user
+// lands on the last question they touched with their draft still filled in.
+function backTo(screenId){
+  if (screenId === 'screen2'){
+    // Return to the questioning: re-render exchanges from saved state, focus
+    // the last one the user was on so a re-edit is one click away.
+    const lastTouched = state.answers.reduce((acc, v, i) => v ? i : acc, 0);
+    buildQuestions();
+    for (let i = 0; i <= lastTouched; i++) startQuestion(i, /*rehydrate=*/true);
+    show('screen2');
+    return;
+  }
+  show(screenId);
 }
 
 /* ── Professor motion system ──────────────────────────────────────────────── */
@@ -453,6 +504,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) presentIdea();
   });
   wireAutoResize($('ideaInput'));
+  handleCheckoutReturn();
 });
 
 function presentIdea(){
@@ -544,7 +596,9 @@ function buildQuestions(){
 }
 
 let qIndex = 0;
-function startQuestion(i){
+// When `rehydrate` is true we're rebuilding this question after a back-nav,
+// so restore the saved draft and skip the auto-focus stampede.
+function startQuestion(i, rehydrate){
   qIndex = i;
   const Q = QUESTIONS[i];
   const wrap = document.createElement('div');
@@ -552,20 +606,43 @@ function startQuestion(i){
   wrap.id = 'ex'+i;
   const skipHtml = Q.skippable
     ? `<button class="linkish muted" onclick="skipQuestion(${i})">Skip. The professor will judge accordingly.</button>` : '';
+  const backHtml = i > 0
+    ? `<button class="back-btn q-back" onclick="prevQuestion(${i})" aria-label="Back to the previous question"><span class="arrow">←</span> Previous question</button>`
+    : '';
   wrap.innerHTML = `
     <div class="bubble tail-prof q-line">
       <span class="serif">${Q.q}</span>
     </div>
     <textarea class="a-input" id="ans${i}" rows="2" placeholder="Your answer..."></textarea>
-    <div style="margin-top:8px; display:flex; gap:12px; align-items:center;">
+    <div style="margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
       <button class="btn ghost" onclick="answerQuestion(${i})">Answer</button>
       ${skipHtml}
+      ${backHtml}
     </div>`;
   $('exchanges').appendChild(wrap);
   const ta = $('ans'+i);
-  ta.focus();
+  // Restore any prior draft (from either a completed answer or a back-nav).
+  if (state.answers[i]) ta.value = state.answers[i];
+  // Persist every keystroke so back-nav never loses in-progress text.
+  ta.addEventListener('input', ()=>{ state.answers[i] = ta.value; });
   ta.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && (e.metaKey||e.ctrlKey)) answerQuestion(i); });
   wireAutoResize(ta);
+  if (!rehydrate) ta.focus();
+}
+
+// Within-screen-2 back: return to question i-1 with its saved answer editable.
+function prevQuestion(i){
+  if (i <= 0) return;
+  const prev = i - 1;
+  // Wipe the current exchange and every completed exchange from `prev` forward,
+  // so the previous question comes back with its input textarea (not a bubble).
+  for (let k = prev; k < QUESTIONS.length; k++){
+    const ex = $('ex'+k);
+    if (ex) ex.remove();
+    $('dot'+k) && $('dot'+k).classList.remove('filled');
+  }
+  $('dotLabel').textContent = `${prev} of 4`;
+  startQuestion(prev);
 }
 
 function completeExchange(i, answer, reaction){
@@ -599,6 +676,7 @@ function answerQuestion(i){
   const Q = QUESTIONS[i];
   if (val.length < (i<2 ? 5 : 1)){ $('ans'+i).focus(); return; }
   state.fields[Q.field] = val;
+  state.answers[i] = val;   // preserve draft for back-nav
   completeExchange(i, val, pickRoast(Q.field, val));
   advance(i);
 }
@@ -606,6 +684,7 @@ function answerQuestion(i){
 function skipQuestion(i){
   const Q = QUESTIONS[i];
   state.fields[Q.field] = 'not provided';   // skipped → the pipeline sees "not provided"
+  state.answers[i] = '';    // no draft to preserve on skip
   completeExchange(i, 'Skipped.', pickRoast(Q.field, ''));
   advance(i);
 }
@@ -830,9 +909,69 @@ function renderBelowCard(c){
 
 /* ── SCREEN 5 — the report ────────────────────────────────────────────────── */
 function openSample(){ loadReport(true); }
-function unlock(){
-  if (LIVE && state.ideaId){ loadReport(false); }
-  else { loadReport(true); }   // demo: unlock shows the public sample report
+async function unlock(){
+  // Live tier: open a Stripe Checkout Session and redirect to the hosted page.
+  // Stripe returns the user to /checkout/success?session_id=... or /checkout/cancel;
+  // the page-load handler below picks up either and restores the flow.
+  if (LIVE && state.ideaId){
+    // Persist just enough state to resume after the round-trip through Stripe.
+    try { sessionStorage.setItem('pv_pending_idea', state.ideaId); } catch(e){}
+    const btn = $('unlockBtn');
+    const originalLabel = btn ? btn.textContent : '';
+    if (btn){ btn.disabled = true; btn.textContent = 'Opening checkout…'; }
+    try {
+      const res = await fetch(`/ideas/${state.ideaId}/checkout`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+      });
+      if (!res.ok){
+        const err = await res.json().catch(()=>({}));
+        alert(err.error || 'Could not open checkout. Please try again.');
+        if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+        return;
+      }
+      const { checkout_url } = await res.json();
+      if (!checkout_url){
+        alert('Checkout URL missing. Please try again.');
+        if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+        return;
+      }
+      window.location.href = checkout_url;
+    } catch(e){
+      alert('Network error opening checkout. Please try again.');
+      if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    }
+    return;
+  }
+  // Demo tier: unlock immediately with the public sample report.
+  loadReport(true);
+}
+
+// If we're landing on /checkout/success or /checkout/cancel, restore the flow.
+// success → jump straight to Screen 5 with the paid report; cancel → back to the
+// reveal so the user can retry or bail. The webhook has already flipped the
+// pending purchase to `paid` by the time Stripe redirects here.
+async function handleCheckoutReturn(){
+  const path = location.pathname;
+  if (path !== '/checkout/success' && path !== '/checkout/cancel') return;
+  let ideaId = null;
+  try { ideaId = sessionStorage.getItem('pv_pending_idea'); } catch(e){}
+  if (!ideaId) ideaId = PARAMS.get('idea_id');
+  if (path === '/checkout/success' && ideaId){
+    state.ideaId = ideaId;
+    // Clean the URL so a refresh doesn't re-trigger the return handler.
+    history.replaceState({}, '', LIVE ? '/?live=1' : '/');
+    try { sessionStorage.removeItem('pv_pending_idea'); } catch(e){}
+    // Pull card data so Screen 4 is intact behind the report, then load the
+    // paid report (which now returns 200 instead of 402).
+    await reveal();
+    await loadReport(false);
+    return;
+  }
+  if (path === '/checkout/cancel' && ideaId){
+    state.ideaId = ideaId;
+    history.replaceState({}, '', LIVE ? '/?live=1' : '/');
+    await reveal();
+  }
 }
 
 async function loadReport(sample){
