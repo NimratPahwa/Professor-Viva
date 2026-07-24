@@ -258,15 +258,31 @@
   .cameo{ height:44px; width:44px; object-fit:contain; border:1.5px solid var(--ink); border-radius:6px; background:var(--cream); }
   .report-head .rt{ font-family:'Playfair Display',serif; font-weight:900; font-size:1.05rem; }
   .report-head .dl{ margin-left:auto; display:flex; gap:10px; }
-  .answer{ padding:20px 0; border-bottom:1px solid var(--hairline); }
+  .answer{ padding:28px 0; border-bottom:1px solid var(--hairline); }
   .answer .an{ font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--green); font-weight:600; }
   .answer h3{ font-family:'Playfair Display',serif; font-size:1.25rem; margin:4px 0 8px; }
   .answer .subj{ font-style:italic; color:var(--ink); margin-bottom:8px; }
-  .claim{ margin:8px 0; padding-left:14px; border-left:2px solid var(--hairline); }
-  .claim a{ color:var(--green); font-size:.8rem; word-break:break-all; }
+  /* Progressive-disclosure takeaway — the one sentence to remember per answer. */
+  .takeaway{ font-family:'Playfair Display',serif; font-size:1.35rem; font-weight:700;
+    line-height:1.35; color:var(--ink); margin:10px 0 18px; padding:14px 16px;
+    border-left:4px solid var(--green); background:var(--caption); border-radius:6px; }
+  .claim{ margin:10px 0; padding-left:14px; border-left:2px solid var(--hairline); }
+  .claim .ct{ font-size:.95rem; line-height:1.5; }
+  .claim a{ color:var(--green); font-size:.78rem; word-break:break-all; }
   .sig{ font-size:.66rem; padding:1px 7px; border-radius:999px; border:1px solid var(--hairline); color:var(--muted); margin-left:6px; }
-  .comp-sec{ margin:10px 0; }
-  .comp-sec .ch{ font-weight:600; }
+  .claims-more{ display:none; }
+  .claims-more.open{ display:block; }
+  .disclose-btn{ background:transparent; border:1px solid var(--hairline); color:var(--muted);
+    font-size:.78rem; padding:6px 14px; border-radius:999px; cursor:pointer; margin-top:10px;
+    letter-spacing:.02em; }
+  .disclose-btn:hover{ color:var(--ink); border-color:var(--ink); }
+  .comp-sec{ margin:16px 0; padding:12px 14px; background:var(--caption); border-radius:6px; }
+  .comp-sec .ch{ font-family:'Playfair Display',serif; font-weight:700; font-size:1.05rem;
+    display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .comp-sec .ch .cs{ font-size:1.3rem; color:var(--green); font-weight:900; }
+  .comp-sec .ch .cs.low{ color:#a23; }
+  .comp-sec .ch .cs.mid{ color:var(--gold); }
+  .body-p{ font-size:1rem; line-height:1.6; margin:10px 0; }
   .nextsteps{ margin:10px 0; }
   .step{ display:flex; gap:10px; align-items:flex-start; margin:10px 0; }
   .step input{ margin-top:4px; width:18px; height:18px; accent-color:var(--green); }
@@ -530,7 +546,10 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Replay a completed saved run at /verdict/:id — loads /replay/:id (deterministic,
-// DB-only, no LLM), then plays the professor reveal → card + stamp → full report.
+// DB-only, no LLM), then LANDS THE VIEWER ON SCREEN 1 with the saved idea and
+// answers pre-filled. The presenter click-advances through the real screens
+// (entrance → questioning → brief mock stream → reveal + card → full report).
+// No timers between screens — every advance is a click.
 // Returns true if the URL matched a replay path (so callers can skip other handlers).
 async function handleReplayReturn(){
   const m = location.pathname.match(/^\/verdict\/([A-Za-z0-9-]+)$/);
@@ -546,13 +565,31 @@ async function handleReplayReturn(){
       return true;
     }
     const data = await res.json();
+    const savedIdea = (data.idea && data.idea.problem) || '';
     state.ideaId = ideaId;
     state.replayData = data;
     state.verdict = data.verdict;
     state.lockedSections = []; // replay skips the paywall teasers
-    // Clean the URL so a refresh from Screen 5 doesn't re-run the sequence.
+    // Seed the four fields + answers so Screen 2 plays through the saved intake.
+    state.idea = savedIdea;
+    state.fields = {
+      problem: (data.idea && data.idea.problem) || '',
+      audience: (data.idea && data.idea.audience) || '',
+      monetization_hypothesis: (data.idea && data.idea.monetization_hypothesis) || '',
+      unfair_advantage: (data.idea && data.idea.unfair_advantage) || ''
+    };
+    state.answers = [
+      state.fields.problem,
+      state.fields.audience,
+      state.fields.monetization_hypothesis,
+      state.fields.unfair_advantage
+    ];
+    // Pre-fill Screen 1's textarea so the client's actual idea is visible in the
+    // speech bubble. The presenter clicks "Present to the Professor" to advance.
+    const input = document.getElementById('ideaInput');
+    if (input){ input.value = savedIdea; setTimeout(() => autoResize(input), 0); }
+    // Clean the URL so a refresh from later screens doesn't re-run the sequence.
     history.replaceState({}, '', '/');
-    await reveal();
     return true;
   } catch (e){
     console.warn('replay error', e);
@@ -658,18 +695,22 @@ function startQuestion(i, rehydrate){
   const wrap = document.createElement('div');
   wrap.className = 'exchange';
   wrap.id = 'ex'+i;
-  const skipHtml = Q.skippable
+  const replay = !!state.replayData;
+  const skipHtml = (Q.skippable && !replay)
     ? `<button class="linkish muted" onclick="skipQuestion(${i})">Skip. The professor will judge accordingly.</button>` : '';
   const backHtml = i > 0
     ? `<button class="back-btn q-back" onclick="prevQuestion(${i})" aria-label="Back to the previous question"><span class="arrow">←</span> Previous question</button>`
     : '';
+  // In replay mode the answers are pre-filled from saved data — the button is
+  // "Next →" and a single click completes the exchange + advances.
+  const primaryLabel = replay ? 'Next →' : 'Answer';
   wrap.innerHTML = `
     <div class="bubble tail-prof q-line">
       <span class="serif">${Q.q}</span>
     </div>
     <textarea class="a-input" id="ans${i}" rows="2" placeholder="Your answer..."></textarea>
     <div style="margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-      <button class="btn ghost" onclick="answerQuestion(${i})">Answer</button>
+      <button class="btn ghost" onclick="answerQuestion(${i})">${primaryLabel}</button>
       ${skipHtml}
       ${backHtml}
     </div>`;
@@ -744,6 +785,9 @@ function skipQuestion(i){
 }
 
 async function finishQuestioning(){
+  // Replay mode: skip the POST /ideas call — the idea already exists in the DB
+  // (that's what we're replaying). Go straight to the wait screen.
+  if (state.replayData){ goToWait(); return; }
   // Assemble the POST /ideas payload from the four fields.
   const payload = {
     problem: state.fields.problem,
@@ -797,8 +841,10 @@ function appendFinding(text, cliff){
 
 function streamVerdict(){
   // Mock stream unless live+id. The mock branch of the endpoint hits no DB/LLM.
-  const useMock = !(LIVE && state.ideaId);
-  const id = state.ideaId || 'demo';
+  // Replay mode always uses the mock branch — the saved verdict is what will be
+  // shown at reveal; the wait screen just replays a brief findings stream for feel.
+  const useMock = state.replayData ? true : !(LIVE && state.ideaId);
+  const id = (state.replayData ? 'demo' : (state.ideaId || 'demo'));
   const url = `/ideas/${id}/free-verdict/stream` + (useMock ? '?mock=1' : `?account_ref=${encodeURIComponent(accountRef())}`);
   const es = new EventSource(url);
 
@@ -846,10 +892,34 @@ function streamVerdict(){
 }
 
 function finishStream(v){
+  // Replay mode: the mock's verdict is throw-away — the real saved verdict
+  // ships to reveal(). Keep the presenter in control: no auto-advance.
+  if (state.replayData){
+    state.verdict = state.replayData.verdict;
+    state.freeRoast = state.replayData.roast;
+    showRevealCta();
+    return;
+  }
   state.verdict = v.verdict;
   state.lockedSections = v.locked_sections || [];
   state.freeRoast = v.roast;
   setTimeout(()=>reveal(), 1400);   // let the cliffhanger breathe
+}
+
+// Renders the "The professor has reached a verdict. →" click-to-continue button
+// beneath the findings stream. Replay-only: real runs auto-advance after a beat.
+function showRevealCta(){
+  const cont = document.getElementById('findings');
+  if (!cont) return;
+  const cta = document.createElement('div');
+  cta.className = 'finding cliff pop';
+  cta.style.marginTop = '18px';
+  cta.innerHTML = `
+    <span class="serif" style="font-size:1.05rem;">The professor has reached a verdict.</span>
+    <div style="margin-top:12px;">
+      <button class="btn primary" onclick="reveal()">Reveal the card →</button>
+    </div>`;
+  cont.appendChild(cta);
 }
 
 let countRAF = {};
@@ -984,11 +1054,18 @@ function renderBelowCard(c){
                BUILD:'The card is yours. The blueprint is extra.' };
   $('transitionLine').textContent = tl[c.verdict] || '';
   const locked = state.lockedSections || [];
-  // Replay mode: skip the paywall teasers and auto-load the full report so the
-  // saved run plays through the real report screens.
+  // Replay mode: skip the paywall teasers and swap in a click-through CTA. No
+  // auto-advance — the presenter controls when to open the full report.
   if (state.replayData){
     $('lockedSections').innerHTML = '';
-    setTimeout(() => loadReport(false), 900);
+    const btn = document.getElementById('unlockBtn');
+    if (btn){
+      btn.textContent = 'Open the full report →';
+      btn.onclick = () => loadReport(false);
+    }
+    // Hide the "See a full sample report first" link in replay mode.
+    const sampleLink = document.querySelector('#belowCard .linkish');
+    if (sampleLink) sampleLink.style.display = 'none';
     return;
   }
   $('lockedSections').innerHTML =
@@ -1139,25 +1216,45 @@ function renderReport(r, exportBase, isSample){
     html += `<div class="answer"><div class="an">Your next steps</div><h3>Do these, in order.</h3><div class="nextsteps" id="nextsteps"></div></div>`;
   }
 
-  // The six answers.
+  // The six answers — progressive disclosure. Each answer opens with a large,
+  // dominant one-line takeaway (subject / first claim / first sentence of body).
+  // Below it: top 2–4 strongest claims by default. The rest collapses behind a
+  // "Show all N claims" expander so the report is skimmable at screen-share size.
+  // Competitive dimension scores stay prominent (colour-coded high/mid/low).
   for (const a of (r.six_answers || [])){
     html += `<div class="answer"><div class="an">Answer ${a.n}</div><h3>${escapeHtml(a.title)}</h3>`;
-    if (a.subject) html += `<div class="subj">${escapeHtml(a.subject)}</div>`;
-    for (const c of (a.claims || [])){
-      html += `<div class="claim">${escapeHtml(c.claim)} <span class="sig">${c.signal}</span>` +
-              (c.source_url ? `<br><a href="${c.source_url}" target="_blank" rel="noopener">${escapeHtml(c.source_url)}</a>` : '') + `</div>`;
+
+    const takeaway = deriveTakeaway(a);
+    if (takeaway) html += `<div class="takeaway">${escapeHtml(takeaway)}</div>`;
+
+    if (a.subject && (!takeaway || takeaway !== a.subject)){
+      html += `<div class="subj">${escapeHtml(a.subject)}</div>`;
     }
+
+    if (a.claims && a.claims.length){
+      html += renderClaimsBlock(a.claims, `a${a.n}`);
+    }
+
     if (a.competitive && a.competitive.sections){
-      for (const sec of a.competitive.sections){
-        html += `<div class="comp-sec"><div class="ch">${escapeHtml(sec.label)} · ${sec.score}/100</div>`;
-        for (const cl of (sec.claims || [])){
-          html += `<div class="claim">${escapeHtml(cl.claim)} <span class="sig">${cl.signal}</span>` +
-                  (cl.source_url ? `<br><a href="${cl.source_url}" target="_blank" rel="noopener">${escapeHtml(cl.source_url)}</a>` : '') + `</div>`;
+      for (let si = 0; si < a.competitive.sections.length; si++){
+        const sec = a.competitive.sections[si];
+        const scoreCls = sec.score >= 70 ? '' : sec.score >= 45 ? 'mid' : 'low';
+        html += `<div class="comp-sec">
+                   <div class="ch"><span>${escapeHtml(sec.label)}</span><span class="cs ${scoreCls}">${sec.score}/100</span></div>`;
+        if (sec.claims && sec.claims.length){
+          html += renderClaimsBlock(sec.claims, `a${a.n}s${si}`);
         }
         html += `</div>`;
       }
     }
-    if (a.body) html += `<p>${escapeHtml(a.body)}</p>`;
+
+    if (a.body){
+      // Body text is usually a paragraph — the takeaway already surfaces the
+      // headline sentence, so render the rest at normal weight for context.
+      const rest = bodyAfterFirstSentence(a.body);
+      if (rest) html += `<p class="body-p">${escapeHtml(rest)}</p>`;
+    }
+
     html += `</div>`;
   }
 
@@ -1173,6 +1270,62 @@ function renderReport(r, exportBase, isSample){
   el.innerHTML = html;
 
   if (steps.length) renderNextSteps(steps, isSample);
+}
+
+// Pick the single sentence to remember for an answer block. Preference order:
+// explicit subject → first claim → first sentence of body → answer title.
+function deriveTakeaway(a){
+  if (a.subject && a.subject.trim()) return a.subject.trim();
+  if (a.claims && a.claims.length && a.claims[0].claim) return firstSentence(a.claims[0].claim);
+  if (a.body) return firstSentence(a.body);
+  return '';
+}
+function firstSentence(txt){
+  const s = String(txt || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(.+?[.!?])(\s|$)/);
+  return (m && m[1]) || (s.length > 220 ? s.slice(0, 217).trim() + '…' : s);
+}
+function bodyAfterFirstSentence(txt){
+  const s = String(txt || '').trim();
+  const fs = firstSentence(s);
+  if (!fs) return s;
+  const rest = s.slice(fs.length).trim();
+  return rest || '';
+}
+// Render a list of claims with progressive disclosure: first `defaultN` shown,
+// the rest collapsed behind a "Show all N claims" button that toggles reveal.
+function renderClaimsBlock(claims, keyPrefix){
+  const defaultN = Math.min(4, Math.max(2, Math.ceil(claims.length / 2)));
+  const shown = claims.slice(0, defaultN);
+  const rest  = claims.slice(defaultN);
+  const shownHtml = shown.map(c => renderClaim(c)).join('');
+  if (!rest.length) return shownHtml;
+  const restId = 'more_' + keyPrefix;
+  const restHtml = rest.map(c => renderClaim(c)).join('');
+  return shownHtml +
+    `<div class="claims-more" id="${restId}">${restHtml}</div>` +
+    `<button class="disclose-btn" onclick="toggleDisclosure('${restId}', this, ${rest.length})">Show all ${claims.length} claims</button>`;
+}
+function renderClaim(c){
+  return `<div class="claim">
+            <div class="ct">${escapeHtml(c.claim)} <span class="sig">${c.signal}</span></div>` +
+         (c.source_url ? `<a href="${c.source_url}" target="_blank" rel="noopener">${escapeHtml(c.source_url)}</a>` : '') +
+         `</div>`;
+}
+function toggleDisclosure(id, btn, hiddenCount){
+  const box = document.getElementById(id);
+  if (!box) return;
+  const open = box.classList.toggle('open');
+  btn.textContent = open ? `Hide ${hiddenCount} more` : `Show all ${hiddenCount + (box.previousElementSibling ? 0 : 0)} claims`;
+  if (!open){
+    // Reset label to "Show all N claims" based on total (hiddenCount + visible siblings above)
+    // Count sibling claims before .claims-more
+    let visible = 0;
+    let n = box.previousElementSibling;
+    while (n && n.classList && n.classList.contains('claim')){ visible++; n = n.previousElementSibling; }
+    btn.textContent = `Show all ${visible + hiddenCount} claims`;
+  }
 }
 
 async function renderNextSteps(steps, isSample){
