@@ -399,7 +399,16 @@
    from the backend (mock or live); this file only presents and animates it.
    ═══════════════════════════════════════════════════════════════════════════ */
 const PARAMS = new URLSearchParams(location.search);
-const LIVE = PARAMS.has('live');
+// LIVE is mutable so the checkout return handler can flip it back on when
+// Stripe redirects to /checkout/success (that URL doesn't carry ?live=1
+// directly — see handleCheckoutReturn for how it's restored).
+let LIVE = PARAMS.has('live');
+function setLiveMode(on){
+  LIVE = !!on;
+  const note = document.getElementById('demoNote');
+  if (LIVE){ note.classList.add('hidden'); document.body.classList.remove('has-note'); }
+  else { note.classList.remove('hidden'); document.body.classList.add('has-note'); }
+}
 if (!LIVE){ document.getElementById('demoNote').classList.remove('hidden'); document.body.classList.add('has-note'); }
 
 // "From Zero to Running App" guide URL — configurable server-side (never
@@ -915,7 +924,13 @@ async function unlock(){
   // the page-load handler below picks up either and restores the flow.
   if (LIVE && state.ideaId){
     // Persist just enough state to resume after the round-trip through Stripe.
-    try { sessionStorage.setItem('pv_pending_idea', state.ideaId); } catch(e){}
+    // pv_pending_live is the authoritative live-mode signal on the return leg —
+    // the redirect URL doesn't carry the original ?live=1 unless the server-side
+    // success_url includes it (belt-and-braces: it now does, too).
+    try {
+      sessionStorage.setItem('pv_pending_idea', state.ideaId);
+      sessionStorage.setItem('pv_pending_live', '1');
+    } catch(e){}
     const btn = $('unlockBtn');
     const originalLabel = btn ? btn.textContent : '';
     if (btn){ btn.disabled = true; btn.textContent = 'Opening checkout…'; }
@@ -953,14 +968,25 @@ async function unlock(){
 async function handleCheckoutReturn(){
   const path = location.pathname;
   if (path !== '/checkout/success' && path !== '/checkout/cancel') return;
-  let ideaId = null;
-  try { ideaId = sessionStorage.getItem('pv_pending_idea'); } catch(e){}
+  let ideaId = null, pendingLive = false;
+  try {
+    ideaId = sessionStorage.getItem('pv_pending_idea');
+    pendingLive = sessionStorage.getItem('pv_pending_live') === '1';
+  } catch(e){}
+  // Fall back to the URL params if sessionStorage was cleared (e.g. private
+  // window, different browser, or a bookmark reload). idea_id + live=1 both
+  // travel on the redirect URL as a belt-and-braces measure.
   if (!ideaId) ideaId = PARAMS.get('idea_id');
+  const returningLive = pendingLive || PARAMS.get('live') === '1';
+  if (returningLive) setLiveMode(true);
   if (path === '/checkout/success' && ideaId){
     state.ideaId = ideaId;
     // Clean the URL so a refresh doesn't re-trigger the return handler.
     history.replaceState({}, '', LIVE ? '/?live=1' : '/');
-    try { sessionStorage.removeItem('pv_pending_idea'); } catch(e){}
+    try {
+      sessionStorage.removeItem('pv_pending_idea');
+      sessionStorage.removeItem('pv_pending_live');
+    } catch(e){}
     // Pull card data so Screen 4 is intact behind the report, then load the
     // paid report (which now returns 200 instead of 402).
     await reveal();
@@ -970,6 +996,7 @@ async function handleCheckoutReturn(){
   if (path === '/checkout/cancel' && ideaId){
     state.ideaId = ideaId;
     history.replaceState({}, '', LIVE ? '/?live=1' : '/');
+    try { sessionStorage.removeItem('pv_pending_live'); } catch(e){}
     await reveal();
   }
 }
