@@ -204,33 +204,42 @@
   .lh .t{ font-family:'Playfair Display',serif; font-weight:900; font-size:.9rem; line-height:1.1; }
   .lh .d{ font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .lh .vn{ margin-left:auto; font-size:.6rem; color:var(--muted); text-align:right; }
-  .card-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:14px 4px; }
-  .card-body .big{ font-family:'Playfair Display',serif; font-size:1.25rem; font-weight:700; line-height:1.2; }
-  .card-body .lbl{ font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  .card-body .row{ margin:4px 0; }
-  .card-foot{ border-top:1.5px solid var(--ink); padding-top:8px; font-size:.6rem; color:var(--muted); text-align:center; }
+  .card-body{ display:flex; flex-direction:column; gap:4px; padding:8px 4px 0; }
+  .card-body .big{ font-family:'Playfair Display',serif; font-size:1rem; font-weight:700; line-height:1.2;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-body .row{ font-size:.72rem; line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-body .lbl{ font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .card-verdict{ text-align:center; margin:auto 0 2px; padding-top:6px; }
+  .card-verdict .cv-word{ font-family:'Playfair Display',serif; font-size:1.6rem; font-weight:900; letter-spacing:.06em; }
+  .card-verdict .cv-score{ font-size:.78rem; color:var(--muted); margin-left:6px; }
+  .card-roast{ font-family:'Playfair Display',serif; font-style:italic; font-size:.62rem; line-height:1.35;
+    color:var(--ink); text-align:center; padding:6px 8px; margin-top:auto; border-top:1px dashed var(--hairline); }
+  .card-foot{ border-top:1.5px solid var(--ink); padding-top:6px; margin-top:6px; font-size:.58rem; color:var(--muted); text-align:center; }
   .seal{
     align-self:center; width:64px; height:64px; border-radius:50%;
     border:2px double var(--green); color:var(--green); display:flex; align-items:center; justify-content:center;
     font-family:'Playfair Display',serif; font-size:.6rem; text-align:center; transform:rotate(-8deg); margin:4px 0;
   }
-  /* Stamp */
+  /* Stamp — positioned in upper card area so it never covers verdict/roast text below.
+     Sits over the header + "in memory of" area (which is short); the body/verdict/roast
+     block below it stays fully readable. */
   .stamp{
-    position:absolute; top:44%; left:50%; transform:translate(-50%,-50%) rotate(-14deg) scale(3.2);
-    font-family:'Playfair Display',serif; font-weight:900; font-size:2.6rem; letter-spacing:.05em;
-    padding:6px 18px; border:4px solid var(--ink); color:var(--ink); opacity:0; pointer-events:none;
-    text-transform:uppercase;
+    position:absolute; top:26%; right:12%; transform:translate(0,-50%) rotate(-14deg) scale(3.2);
+    font-family:'Playfair Display',serif; font-weight:900; font-size:1.7rem; letter-spacing:.05em;
+    padding:4px 12px; border:3.5px solid var(--ink); color:var(--ink); opacity:0; pointer-events:none;
+    text-transform:uppercase; background:rgba(233,228,214,.9);
   }
   .stamp.charcoal{ border-color:var(--ink); color:var(--ink); }
   .stamp.gold{ border-color:var(--gold); color:var(--gold); }
   .stamp.green{ border-color:var(--green); color:var(--green); }
   /* Format joke printed small, beneath the verdict word, inside the stamp. */
   .stamp .stamp-sub{
-    display:block; margin-top:5px; font-family:'Inter',sans-serif; font-weight:600;
-    font-size:.42rem; letter-spacing:.02em; text-transform:none; text-align:center; line-height:1.2;
+    display:block; margin-top:4px; font-family:'Inter',sans-serif; font-weight:600;
+    font-size:.4rem; letter-spacing:.02em; text-transform:none; text-align:center; line-height:1.2;
   }
   .stamp.slam{ animation:slam .45s cubic-bezier(.3,1.4,.5,1) forwards; }
-  @keyframes slam{ 0%{ opacity:0; transform:translate(-50%,-50%) rotate(-14deg) scale(3.2) } 70%{ opacity:1 } 100%{ opacity:.92; transform:translate(-50%,-50%) rotate(-14deg) scale(1) } }
+  @keyframes slam{ 0%{ opacity:0; transform:translate(0,-50%) rotate(-14deg) scale(3.2) } 70%{ opacity:1 } 100%{ opacity:.9; transform:translate(0,-50%) rotate(-14deg) scale(1) } }
   .shake{ animation:shake .3s ease; }
   @keyframes shake{ 0%,100%{ transform:translate(0,0) } 20%{ transform:translate(-2px,1px) } 40%{ transform:translate(2px,-1px) } 60%{ transform:translate(-2px,-1px) } 80%{ transform:translate(2px,1px) } }
 
@@ -433,6 +442,7 @@ const state = {
   cardData: null,
   lockedSections: [],
   report: null,
+  replayData: null,         // set when replaying a completed saved run via /verdict/:id
   answers: ['', '', '', '']  // per-question drafts, preserved across back-navigation
 };
 
@@ -513,8 +523,43 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) presentIdea();
   });
   wireAutoResize($('ideaInput'));
-  handleCheckoutReturn();
+  // Replay first — /verdict/:id plays a saved run through the real screens with
+  // NO live pipeline call. If not a replay URL, fall through to checkout return
+  // (Stripe round-trip) which is a no-op on the plain landing page.
+  handleReplayReturn().then(handled => { if (!handled) handleCheckoutReturn(); });
 });
+
+// Replay a completed saved run at /verdict/:id — loads /replay/:id (deterministic,
+// DB-only, no LLM), then plays the professor reveal → card + stamp → full report.
+// Returns true if the URL matched a replay path (so callers can skip other handlers).
+async function handleReplayReturn(){
+  const m = location.pathname.match(/^\/verdict\/([A-Za-z0-9-]+)$/);
+  const qId = PARAMS.get('replay');
+  const ideaId = (m && m[1]) || qId || null;
+  if (!ideaId) return false;
+  try {
+    const res = await fetch(`/replay/${encodeURIComponent(ideaId)}`);
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Could not replay this verdict.');
+      history.replaceState({}, '', '/');
+      return true;
+    }
+    const data = await res.json();
+    state.ideaId = ideaId;
+    state.replayData = data;
+    state.verdict = data.verdict;
+    state.lockedSections = []; // replay skips the paywall teasers
+    // Clean the URL so a refresh from Screen 5 doesn't re-run the sequence.
+    history.replaceState({}, '', '/');
+    await reveal();
+    return true;
+  } catch (e){
+    console.warn('replay error', e);
+    alert('Failed to load replay.');
+    return true;
+  }
+}
 
 function presentIdea(){
   const idea = $('ideaInput').value.trim();
@@ -820,15 +865,23 @@ function animateCount(el, target){
 async function reveal(){
   show('screen4');
   $('belowCard').classList.add('hidden');
-  // Card data: live → /card-data; demo → /sample's card_data (fully offline).
+  // Card data: replay → preloaded card_data; live → /card-data; demo → /sample.
   try {
-    if (LIVE && state.ideaId){
+    if (state.replayData && state.replayData.card_data){
+      state.cardData = state.replayData.card_data;
+    } else if (LIVE && state.ideaId){
       const res = await fetch(`/ideas/${state.ideaId}/card-data`);
       state.cardData = res.ok ? await res.json() : (await fetchSampleCard());
     } else {
       state.cardData = await fetchSampleCard();
     }
   } catch(e){ state.cardData = await fetchSampleCard(); }
+
+  // Fold the roast into card_data so cardInner can render it on the card itself.
+  // Priority: replay data → free-tier roast (streamed) → sample roast.
+  const roastFromReplay = state.replayData && state.replayData.roast;
+  const roastFromSample = state.sample && state.sample.roast;
+  state.cardData.roast = roastFromReplay || state.freeRoast || roastFromSample || state.cardData.roast || '';
 
   state.verdict = state.cardData.verdict;
   renderCardSequence(state.cardData);
@@ -871,16 +924,22 @@ function cardInner(c){
       <div class="vn">${c.letterhead.verdict_number ? 'No. ' + escapeHtml(c.letterhead.verdict_number) : ''}</div>
     </div>`;
   const foot = `<div class="card-foot">${c.letterhead.footer}</div>`;
+  const verdictBlock = c.verdict && c.total_score != null
+    ? `<div class="card-verdict">
+         <span class="cv-word">${escapeHtml(c.verdict)}</span><span class="cv-score">${c.total_score}/100</span>
+       </div>`
+    : '';
+  const roast = c.roast_short || c.roast || '';
+  const roastBlock = roast
+    ? `<div class="card-roast">${escapeHtml(truncateRoast(roast))}</div>`
+    : '';
   let body = '';
   if (c.format === 'obituary'){
     body = `
       <div class="card-body">
         <div class="lbl">In loving memory of</div>
-        <div class="big">${escapeHtml(c.in_memory_of)}</div>
-        <div class="row"><span class="lbl">Lifespan</span><br>${escapeHtml(c.lifespan)}</div>
-        <div class="row"><span class="lbl">Cause of death</span><br>${escapeHtml(c.cause_of_death)}</div>
-        <div class="row"><span class="lbl">Survived by</span><br>${escapeHtml(c.survived_by)}</div>
-        <div class="row" style="font-style:italic;">In lieu of flowers: ${escapeHtml(c.in_lieu_of_flowers)}</div>
+        <div class="big">${escapeHtml(shortenLine(c.in_memory_of, 80))}</div>
+        <div class="row"><span class="lbl">Cause of death</span><br>${escapeHtml(shortenLine(c.cause_of_death, 120))}</div>
       </div>`;
   } else if (c.format === 'driving_test'){
     body = `
@@ -898,7 +957,25 @@ function cardInner(c){
         <div class="row muted" style="margin-top:14px;">${escapeHtml(c.signature)}</div>
       </div>`;
   }
-  return lh + body + foot;
+  return lh + body + verdictBlock + roastBlock + foot;
+}
+
+// Keep the roast on the card short so the artifact stays readable at share size.
+// Prefer first sentence; hard-cap at ~180 chars.
+function truncateRoast(txt){
+  const s = String(txt || '').trim();
+  if (!s) return '';
+  const firstStop = s.search(/[.!?]\s/);
+  let cut = firstStop > 0 ? s.slice(0, firstStop + 1) : s;
+  if (cut.length > 180) cut = cut.slice(0, 177).trim() + '…';
+  return cut;
+}
+// Shorten long single-line fields (the obituary "in memory of" and "cause of
+// death") to a card-friendly length. Full text remains available in the report.
+function shortenLine(txt, max){
+  const s = String(txt || '').trim();
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).trim() + '…';
 }
 
 function renderBelowCard(c){
@@ -907,6 +984,13 @@ function renderBelowCard(c){
                BUILD:'The card is yours. The blueprint is extra.' };
   $('transitionLine').textContent = tl[c.verdict] || '';
   const locked = state.lockedSections || [];
+  // Replay mode: skip the paywall teasers and auto-load the full report so the
+  // saved run plays through the real report screens.
+  if (state.replayData){
+    $('lockedSections').innerHTML = '';
+    setTimeout(() => loadReport(false), 900);
+    return;
+  }
   $('lockedSections').innerHTML =
     `<h4>The six answers every investor will ask you for.</h4>` +
     locked.map(s => `
@@ -1002,19 +1086,25 @@ async function handleCheckoutReturn(){
 }
 
 async function loadReport(sample){
-  let data, exportBase;
-  if (sample || !(LIVE && state.ideaId)){
+  let data, exportBase, isSampleFlag;
+  if (state.replayData){
+    data = state.replayData;
+    exportBase = `/ideas/${state.ideaId}/report`;
+    isSampleFlag = false;
+  } else if (sample || !(LIVE && state.ideaId)){
     data = state.sample || await (await fetch('/sample')).json();
     exportBase = '/sample';
+    isSampleFlag = true;
   } else {
     const res = await fetch(`/ideas/${state.ideaId}/report`);
     if (res.status === 402){ alert('Locked. Complete checkout to unlock the full report.'); return; }
     if (!res.ok){ alert('Report not ready yet.'); return; }
     data = await res.json();
     exportBase = `/ideas/${state.ideaId}/report`;
+    isSampleFlag = false;
   }
   state.report = data;
-  renderReport(data, exportBase, sample || !(LIVE && state.ideaId));
+  renderReport(data, exportBase, isSampleFlag);
   show('screen5');
 }
 
@@ -1128,16 +1218,31 @@ function downloadCard(){
   ctx.fillStyle = '#201D13';
   ctx.font = '900 34px Georgia'; ctx.fillText(c.letterhead.title, 48, 80);
   ctx.font = '16px Georgia'; ctx.fillStyle = '#9a9587'; ctx.fillText(c.letterhead.department.toUpperCase(), 48, 108);
-  ctx.fillStyle = '#201D13'; ctx.font = 'bold 40px Georgia';
-  wrapText(ctx, cardTitleFor(c), 48, 200, 620, 46);
-  ctx.font = '22px Georgia';
-  wrapText(ctx, cardSubFor(c), 48, 360, 620, 32);
-  ctx.save(); ctx.translate(360,560); ctx.rotate(-0.24);
+  ctx.fillStyle = '#201D13'; ctx.font = 'bold 34px Georgia';
+  wrapText(ctx, cardTitleFor(c), 48, 180, 620, 40);
+  ctx.font = '20px Georgia';
+  wrapText(ctx, cardSubFor(c), 48, 320, 620, 28);
+  // Stamp moved up into the upper half so it doesn't cover the verdict/roast below.
+  ctx.save(); ctx.translate(360,440); ctx.rotate(-0.24);
   ctx.strokeStyle = c.accent==='gold' ? '#C4A44A' : c.accent==='green' ? '#3D5C35' : '#201D13';
-  ctx.lineWidth = 8; ctx.font = '900 72px Georgia'; ctx.fillStyle = ctx.strokeStyle;
-  const tw = ctx.measureText(c.stamp).width; ctx.strokeRect(-tw/2-20,-64,tw+40,88); ctx.fillText(c.stamp, -tw/2, 0);
-  if (c.stamp_subline){ ctx.font = '600 18px Georgia'; ctx.textAlign = 'center'; ctx.fillText(c.stamp_subline, 0, 32); ctx.textAlign = 'left'; }
+  ctx.lineWidth = 7; ctx.font = '900 60px Georgia'; ctx.fillStyle = ctx.strokeStyle;
+  const tw = ctx.measureText(c.stamp).width; ctx.strokeRect(-tw/2-16,-52,tw+32,72); ctx.fillText(c.stamp, -tw/2, 0);
+  if (c.stamp_subline){ ctx.font = '600 16px Georgia'; ctx.textAlign = 'center'; ctx.fillText(c.stamp_subline, 0, 26); ctx.textAlign = 'left'; }
   ctx.restore();
+  // Verdict word + score line, centred.
+  if (c.verdict && c.total_score != null){
+    ctx.fillStyle = '#201D13'; ctx.textAlign = 'center';
+    ctx.font = '900 42px Georgia';
+    ctx.fillText(String(c.verdict).toUpperCase() + '  ' + c.total_score + '/100', 360, 620);
+    ctx.textAlign = 'left';
+  }
+  // Roast (short) at the bottom, italic.
+  const roastTxt = truncateRoast(c.roast || '');
+  if (roastTxt){
+    ctx.fillStyle = '#201D13'; ctx.font = 'italic 18px Georgia'; ctx.textAlign = 'center';
+    wrapText(ctx, '"' + roastTxt + '"', 360, 690, 600, 24);
+    ctx.textAlign = 'left';
+  }
   ctx.fillStyle='#9a9587'; ctx.font='16px Georgia'; ctx.textAlign='center';
   ctx.fillText(c.letterhead.footer, 360, 840); ctx.textAlign='left';
   const a = document.createElement('a'); a.download = `professor-viva-${c.verdict.toLowerCase()}.png`; a.href = cv.toDataURL('image/png'); a.click();

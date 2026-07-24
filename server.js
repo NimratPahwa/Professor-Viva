@@ -93,6 +93,13 @@ app.get(['/checkout/success', '/checkout/cancel'], (req, res) => {
   res.sendFile(path.join(process.cwd(), 'index.html'));
 });
 
+// Replay route (dev/demo): renders a completed saved run through the real
+// screens with NO entitlement wall and NO live pipeline calls. The client
+// picks up /verdict/:id from location.pathname and fetches /replay/:id.
+app.get('/verdict/:id', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'index.html'));
+});
+
 // ─── Intake (Step 1 schema + Step 2 persistence) ────────────────────────────────
 
 app.post('/ideas', async (req, res) => {
@@ -794,6 +801,49 @@ app.get('/ideas/:id/card-data', async (req, res) => {
   } catch (err) {
     console.error('card-data error:', err);
     res.status(500).json({ error: 'Failed to build card data.' });
+  }
+});
+
+// Replay a completed saved run through the real screens (dev/demo). Serves the
+// full paid-tier report package + card_data for any idea that has a completed
+// deep verdict, bypassing entitlement. NO LLM call — reads persisted evidence
+// and verdict, recomputes deterministic scores/competitive/receipts/card_data.
+app.get('/replay/:id', async (req, res) => {
+  try {
+    const idea = await getIdeaById(req.params.id);
+    if (!idea) return res.status(404).json({ error: 'Idea not found.' });
+    const verdict = await getLatestVerdictForIdea(idea.id);
+    if (!verdict || !verdict.voice_pass_output) {
+      return res.status(409).json({ error: 'No completed run for this idea. Cannot replay.' });
+    }
+    const evidence = await getEvidenceForIdea(idea.id);
+    const scores = computeScores(evidence);
+    const competitive = buildCompetitiveAnalysis({ evidence });
+    const receipts = buildReceipts({ idea, evidence, verdict });
+    const six_answers = assembleSixAnswers({ idea, evidence, competitive, sixAnswers: verdict.six_answers });
+    const elapsedMs = idea.created_at && verdict.created_at
+      ? Math.max(0, new Date(verdict.created_at).getTime() - new Date(idea.created_at).getTime())
+      : 0;
+    const verdictNumber = String(verdict.id).slice(0, 8).toUpperCase();
+    const buildsThisMonth = verdict.verdict === 'BUILD' ? await countBuildVerdictsThisMonth() : undefined;
+    const card_data = buildCardData({ idea, verdict: verdict.verdict, scores, evidence, elapsedMs, verdictNumber, buildsThisMonth });
+    res.status(200).json({
+      replay: true,
+      idea_id: idea.id,
+      idea,
+      tier: 'replay',
+      verdict: verdict.verdict,
+      total_score: Number(verdict.total_score),
+      roast: verdict.voice_pass_output,
+      next_steps: verdict.next_steps || [],
+      six_answers,
+      competitive_analysis: competitive,
+      evidence_receipts: receipts,
+      card_data
+    });
+  } catch (err) {
+    console.error('replay error:', err);
+    res.status(500).json({ error: 'Failed to build replay.' });
   }
 });
 
