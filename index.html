@@ -97,6 +97,21 @@
   }
   .linkish.muted{ color:var(--muted); }
 
+  /* ── Back navigation (comic-palette chip; between-screen + within-screen) ─── */
+  .back-row{ margin:0 0 18px; }
+  .back-btn{
+    display:inline-flex; align-items:center; gap:8px;
+    border:1.5px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+    background:var(--caption); color:var(--ink);
+    padding:7px 14px; font-family:'Inter',sans-serif; font-weight:600; font-size:.85rem;
+    border-radius:999px; cursor:pointer;
+    transition:transform .08s ease, box-shadow .08s ease;
+  }
+  .back-btn:hover{ transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); }
+  .back-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink); }
+  .back-btn .arrow{ font-family:'Playfair Display',serif; font-size:1rem; line-height:1; }
+  .back-btn.q-back{ margin-top:10px; }
+
   /* ── Professor (the protagonist) ─────────────────────────────────────────── */
   .prof-wrap{ position:relative; display:flex; justify-content:center; }
   .prof{
@@ -189,33 +204,42 @@
   .lh .t{ font-family:'Playfair Display',serif; font-weight:900; font-size:.9rem; line-height:1.1; }
   .lh .d{ font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .lh .vn{ margin-left:auto; font-size:.6rem; color:var(--muted); text-align:right; }
-  .card-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:14px 4px; }
-  .card-body .big{ font-family:'Playfair Display',serif; font-size:1.25rem; font-weight:700; line-height:1.2; }
-  .card-body .lbl{ font-size:.62rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-  .card-body .row{ margin:4px 0; }
-  .card-foot{ border-top:1.5px solid var(--ink); padding-top:8px; font-size:.6rem; color:var(--muted); text-align:center; }
+  .card-body{ display:flex; flex-direction:column; gap:4px; padding:8px 4px 0; }
+  .card-body .big{ font-family:'Playfair Display',serif; font-size:1rem; font-weight:700; line-height:1.2;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-body .row{ font-size:.72rem; line-height:1.3;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card-body .lbl{ font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .card-verdict{ text-align:center; margin:auto 0 2px; padding-top:6px; }
+  .card-verdict .cv-word{ font-family:'Playfair Display',serif; font-size:1.6rem; font-weight:900; letter-spacing:.06em; }
+  .card-verdict .cv-score{ font-size:.78rem; color:var(--muted); margin-left:6px; }
+  .card-roast{ font-family:'Playfair Display',serif; font-style:italic; font-size:.62rem; line-height:1.35;
+    color:var(--ink); text-align:center; padding:6px 8px; margin-top:auto; border-top:1px dashed var(--hairline); }
+  .card-foot{ border-top:1.5px solid var(--ink); padding-top:6px; margin-top:6px; font-size:.58rem; color:var(--muted); text-align:center; }
   .seal{
     align-self:center; width:64px; height:64px; border-radius:50%;
     border:2px double var(--green); color:var(--green); display:flex; align-items:center; justify-content:center;
     font-family:'Playfair Display',serif; font-size:.6rem; text-align:center; transform:rotate(-8deg); margin:4px 0;
   }
-  /* Stamp */
+  /* Stamp — positioned in upper card area so it never covers verdict/roast text below.
+     Sits over the header + "in memory of" area (which is short); the body/verdict/roast
+     block below it stays fully readable. */
   .stamp{
-    position:absolute; top:44%; left:50%; transform:translate(-50%,-50%) rotate(-14deg) scale(3.2);
-    font-family:'Playfair Display',serif; font-weight:900; font-size:2.6rem; letter-spacing:.05em;
-    padding:6px 18px; border:4px solid var(--ink); color:var(--ink); opacity:0; pointer-events:none;
-    text-transform:uppercase;
+    position:absolute; top:26%; right:12%; transform:translate(0,-50%) rotate(-14deg) scale(3.2);
+    font-family:'Playfair Display',serif; font-weight:900; font-size:1.7rem; letter-spacing:.05em;
+    padding:4px 12px; border:3.5px solid var(--ink); color:var(--ink); opacity:0; pointer-events:none;
+    text-transform:uppercase; background:rgba(233,228,214,.9);
   }
   .stamp.charcoal{ border-color:var(--ink); color:var(--ink); }
   .stamp.gold{ border-color:var(--gold); color:var(--gold); }
   .stamp.green{ border-color:var(--green); color:var(--green); }
   /* Format joke printed small, beneath the verdict word, inside the stamp. */
   .stamp .stamp-sub{
-    display:block; margin-top:5px; font-family:'Inter',sans-serif; font-weight:600;
-    font-size:.42rem; letter-spacing:.02em; text-transform:none; text-align:center; line-height:1.2;
+    display:block; margin-top:4px; font-family:'Inter',sans-serif; font-weight:600;
+    font-size:.4rem; letter-spacing:.02em; text-transform:none; text-align:center; line-height:1.2;
   }
   .stamp.slam{ animation:slam .45s cubic-bezier(.3,1.4,.5,1) forwards; }
-  @keyframes slam{ 0%{ opacity:0; transform:translate(-50%,-50%) rotate(-14deg) scale(3.2) } 70%{ opacity:1 } 100%{ opacity:.92; transform:translate(-50%,-50%) rotate(-14deg) scale(1) } }
+  @keyframes slam{ 0%{ opacity:0; transform:translate(0,-50%) rotate(-14deg) scale(3.2) } 70%{ opacity:1 } 100%{ opacity:.9; transform:translate(0,-50%) rotate(-14deg) scale(1) } }
   .shake{ animation:shake .3s ease; }
   @keyframes shake{ 0%,100%{ transform:translate(0,0) } 20%{ transform:translate(-2px,1px) } 40%{ transform:translate(2px,-1px) } 60%{ transform:translate(-2px,-1px) } 80%{ transform:translate(2px,1px) } }
 
@@ -234,15 +258,31 @@
   .cameo{ height:44px; width:44px; object-fit:contain; border:1.5px solid var(--ink); border-radius:6px; background:var(--cream); }
   .report-head .rt{ font-family:'Playfair Display',serif; font-weight:900; font-size:1.05rem; }
   .report-head .dl{ margin-left:auto; display:flex; gap:10px; }
-  .answer{ padding:20px 0; border-bottom:1px solid var(--hairline); }
+  .answer{ padding:28px 0; border-bottom:1px solid var(--hairline); }
   .answer .an{ font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--green); font-weight:600; }
   .answer h3{ font-family:'Playfair Display',serif; font-size:1.25rem; margin:4px 0 8px; }
   .answer .subj{ font-style:italic; color:var(--ink); margin-bottom:8px; }
-  .claim{ margin:8px 0; padding-left:14px; border-left:2px solid var(--hairline); }
-  .claim a{ color:var(--green); font-size:.8rem; word-break:break-all; }
+  /* Progressive-disclosure takeaway — the one sentence to remember per answer. */
+  .takeaway{ font-family:'Playfair Display',serif; font-size:1.35rem; font-weight:700;
+    line-height:1.35; color:var(--ink); margin:10px 0 18px; padding:14px 16px;
+    border-left:4px solid var(--green); background:var(--caption); border-radius:6px; }
+  .claim{ margin:10px 0; padding-left:14px; border-left:2px solid var(--hairline); }
+  .claim .ct{ font-size:.95rem; line-height:1.5; }
+  .claim a{ color:var(--green); font-size:.78rem; word-break:break-all; }
   .sig{ font-size:.66rem; padding:1px 7px; border-radius:999px; border:1px solid var(--hairline); color:var(--muted); margin-left:6px; }
-  .comp-sec{ margin:10px 0; }
-  .comp-sec .ch{ font-weight:600; }
+  .claims-more{ display:none; }
+  .claims-more.open{ display:block; }
+  .disclose-btn{ background:transparent; border:1px solid var(--hairline); color:var(--muted);
+    font-size:.78rem; padding:6px 14px; border-radius:999px; cursor:pointer; margin-top:10px;
+    letter-spacing:.02em; }
+  .disclose-btn:hover{ color:var(--ink); border-color:var(--ink); }
+  .comp-sec{ margin:16px 0; padding:12px 14px; background:var(--caption); border-radius:6px; }
+  .comp-sec .ch{ font-family:'Playfair Display',serif; font-weight:700; font-size:1.05rem;
+    display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+  .comp-sec .ch .cs{ font-size:1.3rem; color:var(--green); font-weight:900; }
+  .comp-sec .ch .cs.low{ color:#a23; }
+  .comp-sec .ch .cs.mid{ color:var(--gold); }
+  .body-p{ font-size:1rem; line-height:1.6; margin:10px 0; }
   .nextsteps{ margin:10px 0; }
   .step{ display:flex; gap:10px; align-items:flex-start; margin:10px 0; }
   .step input{ margin-top:4px; width:18px; height:18px; accent-color:var(--green); }
@@ -297,6 +337,11 @@
 
   <!-- ══ SCREEN 2 — QUESTIONING ═══════════════════════════════════════════ -->
   <section class="screen" id="screen2">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen1')" aria-label="Back to the idea">
+        <span class="arrow">←</span> Back to the idea
+      </button>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start;">
       <div>
         <div class="caption" style="margin-bottom:20px;">The professor leans in. The questioning begins.</div>
@@ -312,6 +357,11 @@
 
   <!-- ══ SCREEN 3 — THE WAIT ══════════════════════════════════════════════ -->
   <section class="screen" id="screen3">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen2')" aria-label="Back to the questioning">
+        <span class="arrow">←</span> Back to the questioning
+      </button>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start;">
       <div>
         <div class="caption" style="margin-bottom:20px;">Meanwhile, in the professor's study...</div>
@@ -329,6 +379,11 @@
 
   <!-- ══ SCREEN 4 — THE REVEAL ════════════════════════════════════════════ -->
   <section class="screen" id="screen4">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen3')" aria-label="Back to the study">
+        <span class="arrow">←</span> Back to the study
+      </button>
+    </div>
     <div class="reveal-line" id="revealLine">The professor has reached a verdict.</div>
     <div class="card-hold">
       <div class="vcard" id="vcard"><div class="stamp" id="stamp"></div></div>
@@ -349,6 +404,11 @@
 
   <!-- ══ SCREEN 5 — THE SIX ANSWERS ═══════════════════════════════════════ -->
   <section class="screen" id="screen5">
+    <div class="back-row">
+      <button class="back-btn" onclick="backTo('screen4')" aria-label="Back to the verdict">
+        <span class="arrow">←</span> Back to the verdict
+      </button>
+    </div>
     <div class="report" id="report"></div>
   </section>
 
@@ -364,7 +424,16 @@
    from the backend (mock or live); this file only presents and animates it.
    ═══════════════════════════════════════════════════════════════════════════ */
 const PARAMS = new URLSearchParams(location.search);
-const LIVE = PARAMS.has('live');
+// LIVE is mutable so the checkout return handler can flip it back on when
+// Stripe redirects to /checkout/success (that URL doesn't carry ?live=1
+// directly — see handleCheckoutReturn for how it's restored).
+let LIVE = PARAMS.has('live');
+function setLiveMode(on){
+  LIVE = !!on;
+  const note = document.getElementById('demoNote');
+  if (LIVE){ note.classList.add('hidden'); document.body.classList.remove('has-note'); }
+  else { note.classList.remove('hidden'); document.body.classList.add('has-note'); }
+}
 if (!LIVE){ document.getElementById('demoNote').classList.remove('hidden'); document.body.classList.add('has-note'); }
 
 // "From Zero to Running App" guide URL — configurable server-side (never
@@ -388,7 +457,9 @@ const state = {
   verdict: null,            // 'BUILD'|'PIVOT'|'BURY'
   cardData: null,
   lockedSections: [],
-  report: null
+  report: null,
+  replayData: null,         // set when replaying a completed saved run via /verdict/:id
+  answers: ['', '', '', '']  // per-question drafts, preserved across back-navigation
 };
 
 const $ = (id) => document.getElementById(id);
@@ -397,6 +468,21 @@ function show(screenId){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(screenId).classList.add('active');
   window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+// Between-screen back. Rebuilds Screen 2 from saved answers so the user
+// lands on the last question they touched with their draft still filled in.
+function backTo(screenId){
+  if (screenId === 'screen2'){
+    // Return to the questioning: re-render exchanges from saved state, focus
+    // the last one the user was on so a re-edit is one click away.
+    const lastTouched = state.answers.reduce((acc, v, i) => v ? i : acc, 0);
+    buildQuestions();
+    for (let i = 0; i <= lastTouched; i++) startQuestion(i, /*rehydrate=*/true);
+    show('screen2');
+    return;
+  }
+  show(screenId);
 }
 
 /* ── Professor motion system ──────────────────────────────────────────────── */
@@ -453,7 +539,64 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) presentIdea();
   });
   wireAutoResize($('ideaInput'));
+  // Replay first — /verdict/:id plays a saved run through the real screens with
+  // NO live pipeline call. If not a replay URL, fall through to checkout return
+  // (Stripe round-trip) which is a no-op on the plain landing page.
+  handleReplayReturn().then(handled => { if (!handled) handleCheckoutReturn(); });
 });
+
+// Replay a completed saved run at /verdict/:id — loads /replay/:id (deterministic,
+// DB-only, no LLM), then LANDS THE VIEWER ON SCREEN 1 with the saved idea and
+// answers pre-filled. The presenter click-advances through the real screens
+// (entrance → questioning → brief mock stream → reveal + card → full report).
+// No timers between screens — every advance is a click.
+// Returns true if the URL matched a replay path (so callers can skip other handlers).
+async function handleReplayReturn(){
+  const m = location.pathname.match(/^\/verdict\/([A-Za-z0-9-]+)$/);
+  const qId = PARAMS.get('replay');
+  const ideaId = (m && m[1]) || qId || null;
+  if (!ideaId) return false;
+  try {
+    const res = await fetch(`/replay/${encodeURIComponent(ideaId)}`);
+    if (!res.ok){
+      const err = await res.json().catch(() => ({}));
+      alert(err.error || 'Could not replay this verdict.');
+      history.replaceState({}, '', '/');
+      return true;
+    }
+    const data = await res.json();
+    const savedIdea = (data.idea && data.idea.problem) || '';
+    state.ideaId = ideaId;
+    state.replayData = data;
+    state.verdict = data.verdict;
+    state.lockedSections = []; // replay skips the paywall teasers
+    // Seed the four fields + answers so Screen 2 plays through the saved intake.
+    state.idea = savedIdea;
+    state.fields = {
+      problem: (data.idea && data.idea.problem) || '',
+      audience: (data.idea && data.idea.audience) || '',
+      monetization_hypothesis: (data.idea && data.idea.monetization_hypothesis) || '',
+      unfair_advantage: (data.idea && data.idea.unfair_advantage) || ''
+    };
+    state.answers = [
+      state.fields.problem,
+      state.fields.audience,
+      state.fields.monetization_hypothesis,
+      state.fields.unfair_advantage
+    ];
+    // Pre-fill Screen 1's textarea so the client's actual idea is visible in the
+    // speech bubble. The presenter clicks "Present to the Professor" to advance.
+    const input = document.getElementById('ideaInput');
+    if (input){ input.value = savedIdea; setTimeout(() => autoResize(input), 0); }
+    // Clean the URL so a refresh from later screens doesn't re-run the sequence.
+    history.replaceState({}, '', '/');
+    return true;
+  } catch (e){
+    console.warn('replay error', e);
+    alert('Failed to load replay.');
+    return true;
+  }
+}
 
 function presentIdea(){
   const idea = $('ideaInput').value.trim();
@@ -544,28 +687,57 @@ function buildQuestions(){
 }
 
 let qIndex = 0;
-function startQuestion(i){
+// When `rehydrate` is true we're rebuilding this question after a back-nav,
+// so restore the saved draft and skip the auto-focus stampede.
+function startQuestion(i, rehydrate){
   qIndex = i;
   const Q = QUESTIONS[i];
   const wrap = document.createElement('div');
   wrap.className = 'exchange';
   wrap.id = 'ex'+i;
-  const skipHtml = Q.skippable
+  const replay = !!state.replayData;
+  const skipHtml = (Q.skippable && !replay)
     ? `<button class="linkish muted" onclick="skipQuestion(${i})">Skip. The professor will judge accordingly.</button>` : '';
+  const backHtml = i > 0
+    ? `<button class="back-btn q-back" onclick="prevQuestion(${i})" aria-label="Back to the previous question"><span class="arrow">←</span> Previous question</button>`
+    : '';
+  // In replay mode the answers are pre-filled from saved data — the button is
+  // "Next →" and a single click completes the exchange + advances.
+  const primaryLabel = replay ? 'Next →' : 'Answer';
   wrap.innerHTML = `
     <div class="bubble tail-prof q-line">
       <span class="serif">${Q.q}</span>
     </div>
     <textarea class="a-input" id="ans${i}" rows="2" placeholder="Your answer..."></textarea>
-    <div style="margin-top:8px; display:flex; gap:12px; align-items:center;">
-      <button class="btn ghost" onclick="answerQuestion(${i})">Answer</button>
+    <div style="margin-top:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <button class="btn ghost" onclick="answerQuestion(${i})">${primaryLabel}</button>
       ${skipHtml}
+      ${backHtml}
     </div>`;
   $('exchanges').appendChild(wrap);
   const ta = $('ans'+i);
-  ta.focus();
+  // Restore any prior draft (from either a completed answer or a back-nav).
+  if (state.answers[i]) ta.value = state.answers[i];
+  // Persist every keystroke so back-nav never loses in-progress text.
+  ta.addEventListener('input', ()=>{ state.answers[i] = ta.value; });
   ta.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && (e.metaKey||e.ctrlKey)) answerQuestion(i); });
   wireAutoResize(ta);
+  if (!rehydrate) ta.focus();
+}
+
+// Within-screen-2 back: return to question i-1 with its saved answer editable.
+function prevQuestion(i){
+  if (i <= 0) return;
+  const prev = i - 1;
+  // Wipe the current exchange and every completed exchange from `prev` forward,
+  // so the previous question comes back with its input textarea (not a bubble).
+  for (let k = prev; k < QUESTIONS.length; k++){
+    const ex = $('ex'+k);
+    if (ex) ex.remove();
+    $('dot'+k) && $('dot'+k).classList.remove('filled');
+  }
+  $('dotLabel').textContent = `${prev} of 4`;
+  startQuestion(prev);
 }
 
 function completeExchange(i, answer, reaction){
@@ -599,6 +771,7 @@ function answerQuestion(i){
   const Q = QUESTIONS[i];
   if (val.length < (i<2 ? 5 : 1)){ $('ans'+i).focus(); return; }
   state.fields[Q.field] = val;
+  state.answers[i] = val;   // preserve draft for back-nav
   completeExchange(i, val, pickRoast(Q.field, val));
   advance(i);
 }
@@ -606,11 +779,15 @@ function answerQuestion(i){
 function skipQuestion(i){
   const Q = QUESTIONS[i];
   state.fields[Q.field] = 'not provided';   // skipped → the pipeline sees "not provided"
+  state.answers[i] = '';    // no draft to preserve on skip
   completeExchange(i, 'Skipped.', pickRoast(Q.field, ''));
   advance(i);
 }
 
 async function finishQuestioning(){
+  // Replay mode: skip the POST /ideas call — the idea already exists in the DB
+  // (that's what we're replaying). Go straight to the wait screen.
+  if (state.replayData){ goToWait(); return; }
   // Assemble the POST /ideas payload from the four fields.
   const payload = {
     problem: state.fields.problem,
@@ -664,8 +841,10 @@ function appendFinding(text, cliff){
 
 function streamVerdict(){
   // Mock stream unless live+id. The mock branch of the endpoint hits no DB/LLM.
-  const useMock = !(LIVE && state.ideaId);
-  const id = state.ideaId || 'demo';
+  // Replay mode always uses the mock branch — the saved verdict is what will be
+  // shown at reveal; the wait screen just replays a brief findings stream for feel.
+  const useMock = state.replayData ? true : !(LIVE && state.ideaId);
+  const id = (state.replayData ? 'demo' : (state.ideaId || 'demo'));
   const url = `/ideas/${id}/free-verdict/stream` + (useMock ? '?mock=1' : `?account_ref=${encodeURIComponent(accountRef())}`);
   const es = new EventSource(url);
 
@@ -713,10 +892,34 @@ function streamVerdict(){
 }
 
 function finishStream(v){
+  // Replay mode: the mock's verdict is throw-away — the real saved verdict
+  // ships to reveal(). Keep the presenter in control: no auto-advance.
+  if (state.replayData){
+    state.verdict = state.replayData.verdict;
+    state.freeRoast = state.replayData.roast;
+    showRevealCta();
+    return;
+  }
   state.verdict = v.verdict;
   state.lockedSections = v.locked_sections || [];
   state.freeRoast = v.roast;
   setTimeout(()=>reveal(), 1400);   // let the cliffhanger breathe
+}
+
+// Renders the "The professor has reached a verdict. →" click-to-continue button
+// beneath the findings stream. Replay-only: real runs auto-advance after a beat.
+function showRevealCta(){
+  const cont = document.getElementById('findings');
+  if (!cont) return;
+  const cta = document.createElement('div');
+  cta.className = 'finding cliff pop';
+  cta.style.marginTop = '18px';
+  cta.innerHTML = `
+    <span class="serif" style="font-size:1.05rem;">The professor has reached a verdict.</span>
+    <div style="margin-top:12px;">
+      <button class="btn primary" onclick="reveal()">Reveal the card →</button>
+    </div>`;
+  cont.appendChild(cta);
 }
 
 let countRAF = {};
@@ -732,15 +935,23 @@ function animateCount(el, target){
 async function reveal(){
   show('screen4');
   $('belowCard').classList.add('hidden');
-  // Card data: live → /card-data; demo → /sample's card_data (fully offline).
+  // Card data: replay → preloaded card_data; live → /card-data; demo → /sample.
   try {
-    if (LIVE && state.ideaId){
+    if (state.replayData && state.replayData.card_data){
+      state.cardData = state.replayData.card_data;
+    } else if (LIVE && state.ideaId){
       const res = await fetch(`/ideas/${state.ideaId}/card-data`);
       state.cardData = res.ok ? await res.json() : (await fetchSampleCard());
     } else {
       state.cardData = await fetchSampleCard();
     }
   } catch(e){ state.cardData = await fetchSampleCard(); }
+
+  // Fold the roast into card_data so cardInner can render it on the card itself.
+  // Priority: replay data → free-tier roast (streamed) → sample roast.
+  const roastFromReplay = state.replayData && state.replayData.roast;
+  const roastFromSample = state.sample && state.sample.roast;
+  state.cardData.roast = roastFromReplay || state.freeRoast || roastFromSample || state.cardData.roast || '';
 
   state.verdict = state.cardData.verdict;
   renderCardSequence(state.cardData);
@@ -783,16 +994,22 @@ function cardInner(c){
       <div class="vn">${c.letterhead.verdict_number ? 'No. ' + escapeHtml(c.letterhead.verdict_number) : ''}</div>
     </div>`;
   const foot = `<div class="card-foot">${c.letterhead.footer}</div>`;
+  const verdictBlock = c.verdict && c.total_score != null
+    ? `<div class="card-verdict">
+         <span class="cv-word">${escapeHtml(c.verdict)}</span><span class="cv-score">${c.total_score}/100</span>
+       </div>`
+    : '';
+  const roast = c.roast_short || c.roast || '';
+  const roastBlock = roast
+    ? `<div class="card-roast">${escapeHtml(truncateRoast(roast))}</div>`
+    : '';
   let body = '';
   if (c.format === 'obituary'){
     body = `
       <div class="card-body">
         <div class="lbl">In loving memory of</div>
-        <div class="big">${escapeHtml(c.in_memory_of)}</div>
-        <div class="row"><span class="lbl">Lifespan</span><br>${escapeHtml(c.lifespan)}</div>
-        <div class="row"><span class="lbl">Cause of death</span><br>${escapeHtml(c.cause_of_death)}</div>
-        <div class="row"><span class="lbl">Survived by</span><br>${escapeHtml(c.survived_by)}</div>
-        <div class="row" style="font-style:italic;">In lieu of flowers: ${escapeHtml(c.in_lieu_of_flowers)}</div>
+        <div class="big">${escapeHtml(shortenLine(c.in_memory_of, 80))}</div>
+        <div class="row"><span class="lbl">Cause of death</span><br>${escapeHtml(shortenLine(c.cause_of_death, 120))}</div>
       </div>`;
   } else if (c.format === 'driving_test'){
     body = `
@@ -810,7 +1027,25 @@ function cardInner(c){
         <div class="row muted" style="margin-top:14px;">${escapeHtml(c.signature)}</div>
       </div>`;
   }
-  return lh + body + foot;
+  return lh + body + verdictBlock + roastBlock + foot;
+}
+
+// Keep the roast on the card short so the artifact stays readable at share size.
+// Prefer first sentence; hard-cap at ~180 chars.
+function truncateRoast(txt){
+  const s = String(txt || '').trim();
+  if (!s) return '';
+  const firstStop = s.search(/[.!?]\s/);
+  let cut = firstStop > 0 ? s.slice(0, firstStop + 1) : s;
+  if (cut.length > 180) cut = cut.slice(0, 177).trim() + '…';
+  return cut;
+}
+// Shorten long single-line fields (the obituary "in memory of" and "cause of
+// death") to a card-friendly length. Full text remains available in the report.
+function shortenLine(txt, max){
+  const s = String(txt || '').trim();
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).trim() + '…';
 }
 
 function renderBelowCard(c){
@@ -819,6 +1054,20 @@ function renderBelowCard(c){
                BUILD:'The card is yours. The blueprint is extra.' };
   $('transitionLine').textContent = tl[c.verdict] || '';
   const locked = state.lockedSections || [];
+  // Replay mode: skip the paywall teasers and swap in a click-through CTA. No
+  // auto-advance — the presenter controls when to open the full report.
+  if (state.replayData){
+    $('lockedSections').innerHTML = '';
+    const btn = document.getElementById('unlockBtn');
+    if (btn){
+      btn.textContent = 'Open the full report →';
+      btn.onclick = () => loadReport(false);
+    }
+    // Hide the "See a full sample report first" link in replay mode.
+    const sampleLink = document.querySelector('#belowCard .linkish');
+    if (sampleLink) sampleLink.style.display = 'none';
+    return;
+  }
   $('lockedSections').innerHTML =
     `<h4>The six answers every investor will ask you for.</h4>` +
     locked.map(s => `
@@ -830,25 +1079,109 @@ function renderBelowCard(c){
 
 /* ── SCREEN 5 — the report ────────────────────────────────────────────────── */
 function openSample(){ loadReport(true); }
-function unlock(){
-  if (LIVE && state.ideaId){ loadReport(false); }
-  else { loadReport(true); }   // demo: unlock shows the public sample report
+async function unlock(){
+  // Live tier: open a Stripe Checkout Session and redirect to the hosted page.
+  // Stripe returns the user to /checkout/success?session_id=... or /checkout/cancel;
+  // the page-load handler below picks up either and restores the flow.
+  if (LIVE && state.ideaId){
+    // Persist just enough state to resume after the round-trip through Stripe.
+    // pv_pending_live is the authoritative live-mode signal on the return leg —
+    // the redirect URL doesn't carry the original ?live=1 unless the server-side
+    // success_url includes it (belt-and-braces: it now does, too).
+    try {
+      sessionStorage.setItem('pv_pending_idea', state.ideaId);
+      sessionStorage.setItem('pv_pending_live', '1');
+    } catch(e){}
+    const btn = $('unlockBtn');
+    const originalLabel = btn ? btn.textContent : '';
+    if (btn){ btn.disabled = true; btn.textContent = 'Opening checkout…'; }
+    try {
+      const res = await fetch(`/ideas/${state.ideaId}/checkout`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'
+      });
+      if (!res.ok){
+        const err = await res.json().catch(()=>({}));
+        alert(err.error || 'Could not open checkout. Please try again.');
+        if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+        return;
+      }
+      const { checkout_url } = await res.json();
+      if (!checkout_url){
+        alert('Checkout URL missing. Please try again.');
+        if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+        return;
+      }
+      window.location.href = checkout_url;
+    } catch(e){
+      alert('Network error opening checkout. Please try again.');
+      if (btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    }
+    return;
+  }
+  // Demo tier: unlock immediately with the public sample report.
+  loadReport(true);
+}
+
+// If we're landing on /checkout/success or /checkout/cancel, restore the flow.
+// success → jump straight to Screen 5 with the paid report; cancel → back to the
+// reveal so the user can retry or bail. The webhook has already flipped the
+// pending purchase to `paid` by the time Stripe redirects here.
+async function handleCheckoutReturn(){
+  const path = location.pathname;
+  if (path !== '/checkout/success' && path !== '/checkout/cancel') return;
+  let ideaId = null, pendingLive = false;
+  try {
+    ideaId = sessionStorage.getItem('pv_pending_idea');
+    pendingLive = sessionStorage.getItem('pv_pending_live') === '1';
+  } catch(e){}
+  // Fall back to the URL params if sessionStorage was cleared (e.g. private
+  // window, different browser, or a bookmark reload). idea_id + live=1 both
+  // travel on the redirect URL as a belt-and-braces measure.
+  if (!ideaId) ideaId = PARAMS.get('idea_id');
+  const returningLive = pendingLive || PARAMS.get('live') === '1';
+  if (returningLive) setLiveMode(true);
+  if (path === '/checkout/success' && ideaId){
+    state.ideaId = ideaId;
+    // Clean the URL so a refresh doesn't re-trigger the return handler.
+    history.replaceState({}, '', LIVE ? '/?live=1' : '/');
+    try {
+      sessionStorage.removeItem('pv_pending_idea');
+      sessionStorage.removeItem('pv_pending_live');
+    } catch(e){}
+    // Pull card data so Screen 4 is intact behind the report, then load the
+    // paid report (which now returns 200 instead of 402).
+    await reveal();
+    await loadReport(false);
+    return;
+  }
+  if (path === '/checkout/cancel' && ideaId){
+    state.ideaId = ideaId;
+    history.replaceState({}, '', LIVE ? '/?live=1' : '/');
+    try { sessionStorage.removeItem('pv_pending_live'); } catch(e){}
+    await reveal();
+  }
 }
 
 async function loadReport(sample){
-  let data, exportBase;
-  if (sample || !(LIVE && state.ideaId)){
+  let data, exportBase, isSampleFlag;
+  if (state.replayData){
+    data = state.replayData;
+    exportBase = `/ideas/${state.ideaId}/report`;
+    isSampleFlag = false;
+  } else if (sample || !(LIVE && state.ideaId)){
     data = state.sample || await (await fetch('/sample')).json();
     exportBase = '/sample';
+    isSampleFlag = true;
   } else {
     const res = await fetch(`/ideas/${state.ideaId}/report`);
     if (res.status === 402){ alert('Locked. Complete checkout to unlock the full report.'); return; }
     if (!res.ok){ alert('Report not ready yet.'); return; }
     data = await res.json();
     exportBase = `/ideas/${state.ideaId}/report`;
+    isSampleFlag = false;
   }
   state.report = data;
-  renderReport(data, exportBase, sample || !(LIVE && state.ideaId));
+  renderReport(data, exportBase, isSampleFlag);
   show('screen5');
 }
 
@@ -883,25 +1216,45 @@ function renderReport(r, exportBase, isSample){
     html += `<div class="answer"><div class="an">Your next steps</div><h3>Do these, in order.</h3><div class="nextsteps" id="nextsteps"></div></div>`;
   }
 
-  // The six answers.
+  // The six answers — progressive disclosure. Each answer opens with a large,
+  // dominant one-line takeaway (subject / first claim / first sentence of body).
+  // Below it: top 2–4 strongest claims by default. The rest collapses behind a
+  // "Show all N claims" expander so the report is skimmable at screen-share size.
+  // Competitive dimension scores stay prominent (colour-coded high/mid/low).
   for (const a of (r.six_answers || [])){
     html += `<div class="answer"><div class="an">Answer ${a.n}</div><h3>${escapeHtml(a.title)}</h3>`;
-    if (a.subject) html += `<div class="subj">${escapeHtml(a.subject)}</div>`;
-    for (const c of (a.claims || [])){
-      html += `<div class="claim">${escapeHtml(c.claim)} <span class="sig">${c.signal}</span>` +
-              (c.source_url ? `<br><a href="${c.source_url}" target="_blank" rel="noopener">${escapeHtml(c.source_url)}</a>` : '') + `</div>`;
+
+    const takeaway = deriveTakeaway(a);
+    if (takeaway) html += `<div class="takeaway">${escapeHtml(takeaway)}</div>`;
+
+    if (a.subject && (!takeaway || takeaway !== a.subject)){
+      html += `<div class="subj">${escapeHtml(a.subject)}</div>`;
     }
+
+    if (a.claims && a.claims.length){
+      html += renderClaimsBlock(a.claims, `a${a.n}`);
+    }
+
     if (a.competitive && a.competitive.sections){
-      for (const sec of a.competitive.sections){
-        html += `<div class="comp-sec"><div class="ch">${escapeHtml(sec.label)} · ${sec.score}/100</div>`;
-        for (const cl of (sec.claims || [])){
-          html += `<div class="claim">${escapeHtml(cl.claim)} <span class="sig">${cl.signal}</span>` +
-                  (cl.source_url ? `<br><a href="${cl.source_url}" target="_blank" rel="noopener">${escapeHtml(cl.source_url)}</a>` : '') + `</div>`;
+      for (let si = 0; si < a.competitive.sections.length; si++){
+        const sec = a.competitive.sections[si];
+        const scoreCls = sec.score >= 70 ? '' : sec.score >= 45 ? 'mid' : 'low';
+        html += `<div class="comp-sec">
+                   <div class="ch"><span>${escapeHtml(sec.label)}</span><span class="cs ${scoreCls}">${sec.score}/100</span></div>`;
+        if (sec.claims && sec.claims.length){
+          html += renderClaimsBlock(sec.claims, `a${a.n}s${si}`);
         }
         html += `</div>`;
       }
     }
-    if (a.body) html += `<p>${escapeHtml(a.body)}</p>`;
+
+    if (a.body){
+      // Body text is usually a paragraph — the takeaway already surfaces the
+      // headline sentence, so render the rest at normal weight for context.
+      const rest = bodyAfterFirstSentence(a.body);
+      if (rest) html += `<p class="body-p">${escapeHtml(rest)}</p>`;
+    }
+
     html += `</div>`;
   }
 
@@ -917,6 +1270,62 @@ function renderReport(r, exportBase, isSample){
   el.innerHTML = html;
 
   if (steps.length) renderNextSteps(steps, isSample);
+}
+
+// Pick the single sentence to remember for an answer block. Preference order:
+// explicit subject → first claim → first sentence of body → answer title.
+function deriveTakeaway(a){
+  if (a.subject && a.subject.trim()) return a.subject.trim();
+  if (a.claims && a.claims.length && a.claims[0].claim) return firstSentence(a.claims[0].claim);
+  if (a.body) return firstSentence(a.body);
+  return '';
+}
+function firstSentence(txt){
+  const s = String(txt || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(.+?[.!?])(\s|$)/);
+  return (m && m[1]) || (s.length > 220 ? s.slice(0, 217).trim() + '…' : s);
+}
+function bodyAfterFirstSentence(txt){
+  const s = String(txt || '').trim();
+  const fs = firstSentence(s);
+  if (!fs) return s;
+  const rest = s.slice(fs.length).trim();
+  return rest || '';
+}
+// Render a list of claims with progressive disclosure: first `defaultN` shown,
+// the rest collapsed behind a "Show all N claims" button that toggles reveal.
+function renderClaimsBlock(claims, keyPrefix){
+  const defaultN = Math.min(4, Math.max(2, Math.ceil(claims.length / 2)));
+  const shown = claims.slice(0, defaultN);
+  const rest  = claims.slice(defaultN);
+  const shownHtml = shown.map(c => renderClaim(c)).join('');
+  if (!rest.length) return shownHtml;
+  const restId = 'more_' + keyPrefix;
+  const restHtml = rest.map(c => renderClaim(c)).join('');
+  return shownHtml +
+    `<div class="claims-more" id="${restId}">${restHtml}</div>` +
+    `<button class="disclose-btn" onclick="toggleDisclosure('${restId}', this, ${rest.length})">Show all ${claims.length} claims</button>`;
+}
+function renderClaim(c){
+  return `<div class="claim">
+            <div class="ct">${escapeHtml(c.claim)} <span class="sig">${c.signal}</span></div>` +
+         (c.source_url ? `<a href="${c.source_url}" target="_blank" rel="noopener">${escapeHtml(c.source_url)}</a>` : '') +
+         `</div>`;
+}
+function toggleDisclosure(id, btn, hiddenCount){
+  const box = document.getElementById(id);
+  if (!box) return;
+  const open = box.classList.toggle('open');
+  btn.textContent = open ? `Hide ${hiddenCount} more` : `Show all ${hiddenCount + (box.previousElementSibling ? 0 : 0)} claims`;
+  if (!open){
+    // Reset label to "Show all N claims" based on total (hiddenCount + visible siblings above)
+    // Count sibling claims before .claims-more
+    let visible = 0;
+    let n = box.previousElementSibling;
+    while (n && n.classList && n.classList.contains('claim')){ visible++; n = n.previousElementSibling; }
+    btn.textContent = `Show all ${visible + hiddenCount} claims`;
+  }
 }
 
 async function renderNextSteps(steps, isSample){
@@ -962,16 +1371,31 @@ function downloadCard(){
   ctx.fillStyle = '#201D13';
   ctx.font = '900 34px Georgia'; ctx.fillText(c.letterhead.title, 48, 80);
   ctx.font = '16px Georgia'; ctx.fillStyle = '#9a9587'; ctx.fillText(c.letterhead.department.toUpperCase(), 48, 108);
-  ctx.fillStyle = '#201D13'; ctx.font = 'bold 40px Georgia';
-  wrapText(ctx, cardTitleFor(c), 48, 200, 620, 46);
-  ctx.font = '22px Georgia';
-  wrapText(ctx, cardSubFor(c), 48, 360, 620, 32);
-  ctx.save(); ctx.translate(360,560); ctx.rotate(-0.24);
+  ctx.fillStyle = '#201D13'; ctx.font = 'bold 34px Georgia';
+  wrapText(ctx, cardTitleFor(c), 48, 180, 620, 40);
+  ctx.font = '20px Georgia';
+  wrapText(ctx, cardSubFor(c), 48, 320, 620, 28);
+  // Stamp moved up into the upper half so it doesn't cover the verdict/roast below.
+  ctx.save(); ctx.translate(360,440); ctx.rotate(-0.24);
   ctx.strokeStyle = c.accent==='gold' ? '#C4A44A' : c.accent==='green' ? '#3D5C35' : '#201D13';
-  ctx.lineWidth = 8; ctx.font = '900 72px Georgia'; ctx.fillStyle = ctx.strokeStyle;
-  const tw = ctx.measureText(c.stamp).width; ctx.strokeRect(-tw/2-20,-64,tw+40,88); ctx.fillText(c.stamp, -tw/2, 0);
-  if (c.stamp_subline){ ctx.font = '600 18px Georgia'; ctx.textAlign = 'center'; ctx.fillText(c.stamp_subline, 0, 32); ctx.textAlign = 'left'; }
+  ctx.lineWidth = 7; ctx.font = '900 60px Georgia'; ctx.fillStyle = ctx.strokeStyle;
+  const tw = ctx.measureText(c.stamp).width; ctx.strokeRect(-tw/2-16,-52,tw+32,72); ctx.fillText(c.stamp, -tw/2, 0);
+  if (c.stamp_subline){ ctx.font = '600 16px Georgia'; ctx.textAlign = 'center'; ctx.fillText(c.stamp_subline, 0, 26); ctx.textAlign = 'left'; }
   ctx.restore();
+  // Verdict word + score line, centred.
+  if (c.verdict && c.total_score != null){
+    ctx.fillStyle = '#201D13'; ctx.textAlign = 'center';
+    ctx.font = '900 42px Georgia';
+    ctx.fillText(String(c.verdict).toUpperCase() + '  ' + c.total_score + '/100', 360, 620);
+    ctx.textAlign = 'left';
+  }
+  // Roast (short) at the bottom, italic.
+  const roastTxt = truncateRoast(c.roast || '');
+  if (roastTxt){
+    ctx.fillStyle = '#201D13'; ctx.font = 'italic 18px Georgia'; ctx.textAlign = 'center';
+    wrapText(ctx, '"' + roastTxt + '"', 360, 690, 600, 24);
+    ctx.textAlign = 'left';
+  }
   ctx.fillStyle='#9a9587'; ctx.font='16px Georgia'; ctx.textAlign='center';
   ctx.fillText(c.letterhead.footer, 360, 840); ctx.textAlign='left';
   const a = document.createElement('a'); a.download = `professor-viva-${c.verdict.toLowerCase()}.png`; a.href = cv.toDataURL('image/png'); a.click();
